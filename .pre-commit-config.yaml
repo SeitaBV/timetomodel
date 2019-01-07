@@ -1,0 +1,20 @@
+repos:
+- repo: https://github.com/ambv/black
+  rev: 024c9cab55da7bd3236fd88759c9735d6149b464
+  hooks:
+  - id: black
+    language_version: python3.6
+- repo: https://gitlab.com/pycqa/flake8
+  rev: 894c4ac9ee2a2309bfdf873a841cd9fc2f05df1b
+  hooks:
+  - id: flake8
+    args: [ts_forecasting_pipeline]
+- repo: https://github.com/asottile/seed-isort-config
+  rev: v1.5.0
+  hooks:
+  - id: seed-isort-config
+- repo:  https://github.com/pre-commit/mirrors-isort
+  rev: v4.3.4
+  hooks:
+  - id: isort
+    args: ['--silent-overwrite']
