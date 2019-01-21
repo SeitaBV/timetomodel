@@ -5,6 +5,7 @@ import json
 import pickle
 import copy
 from datetime import date, datetime, timedelta, tzinfo
+from typing import Type
 
 
 from statsmodels.base.model import LikelihoodModelResults as StatsModel
@@ -84,6 +85,8 @@ def json_serial_helper(obj):
         return obj.isoformat()
     if isinstance(obj, timedelta):
         return obj.total_seconds()
+    if isinstance(obj, Type):
+        return "%s.%s" % (obj.__module__, obj.__name__)
     if isinstance(obj, tzinfo):
         return str(obj)
     if isinstance(obj, SeriesSpecs):
