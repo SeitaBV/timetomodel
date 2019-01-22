@@ -8,12 +8,15 @@ from statsmodels.api import OLS
 from ts_forecasting_pipeline import speccing, modelling, forecasting
 
 
+DATA_START = datetime(2019, 1, 22, 15, tzinfo=pytz.timezone("Europe/Amsterdam"))
+TOLERANCE = 0.01
+
+
 def create_dummy_model() -> modelling.ModelState:
     """
     Create a dummy model. Try out two different ways to define Series specs.
     """
-    start = datetime(2019, 1, 22, 15, tzinfo=pytz.timezone("Europe/Amsterdam"))
-    dt_range = pd.date_range(start, start + timedelta(hours=24), freq="15T")
+    dt_range = pd.date_range(DATA_START, DATA_START + timedelta(hours=24), freq="15T")
     outcome_values = [0]
     regressor_values = [5]
     for i in range(1, len(dt_range)):
@@ -28,8 +31,8 @@ def create_dummy_model() -> modelling.ModelState:
         #frequency=timedelta(hours=1),
         horizon=timedelta(minutes=30),
         regressors=[regressor_series],
-        start_of_training=start + timedelta(hours=1),
-        end_of_testing=start + timedelta(hours=12),
+        start_of_training=DATA_START + timedelta(hours=1),
+        end_of_testing=DATA_START + timedelta(hours=12),
     )
     return modelling.ModelState(
         modelling.create_fitted_model(specs, version="0.1", save=False), specs
@@ -38,13 +41,32 @@ def create_dummy_model() -> modelling.ModelState:
 
 def test_make_forecast():
     """ Given a simple linear model, try to make a forecast. """
-    tolerance = 0.01
     model, specs = create_dummy_model().split()
-    dt = datetime(2019, 1, 22, 22, tzinfo=pytz.timezone("Europe/Amsterdam"))
+    dt = datetime(2020, 1, 22, 22, tzinfo=pytz.timezone("Europe/Amsterdam"))
     features = pd.DataFrame(index=pd.DatetimeIndex(start=dt, end=dt, freq="15T"),
                             data={"my_outcome_l1": 892, "my_outcome_l2": 891, "Regressor1": 5})
     fc = forecasting.make_forecast_for(specs, features, model)
-    assert abs(fc - 893) <= tolerance
+    assert abs(fc - 893) <= TOLERANCE
+
+
+def test_rolling_forecast():
+    """Using the simple linear model, create a rolling forecast"""
+    model, specs = create_dummy_model().split()
+    start = DATA_START + timedelta(hours=18)
+    end = DATA_START + timedelta(hours=20)
+    forecasts = forecasting.make_rolling_forecasts(start, end, specs)[0]
+    expected_values = specs.outcome_var.load_series()[18*4:20:4]
+    print("CORRECT VALUES:")
+    print(expected_values)
+    print("FORECASTS:")
+    print(forecasts)
+    assert 1 == 2
+    for forecast, expected_value in zip(forecasts, expected_values):
+        print(forecast, expected_value)
+        assert abs(forecast - expected_value) > TOLERANCE
+
+
+# TODO: test refitting the model in between?
 
 
 @pytest.mark.skip(reason="Not implemented yet.")
