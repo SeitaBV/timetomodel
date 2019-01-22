@@ -1,15 +1,56 @@
+from datetime import datetime, timedelta
+
+import pytest
 import pandas as pd
+import pytz
+from statsmodels.api import OLS
+
+from ts_forecasting_pipeline import speccing, modelling, forecasting
+
+
+def create_dummy_model() -> modelling.ModelState:
+    """
+    Create a dummy model. Try out two different ways to define Series specs.
+    """
+    start = datetime(2019, 1, 22, 15, tzinfo=pytz.timezone("Europe/Amsterdam"))
+    dt_range = pd.date_range(start, start + timedelta(hours=24), freq="15T")
+    outcome_values = [0]
+    regressor_values = [5]
+    for i in range(1, len(dt_range)):
+        outcome_values.append(outcome_values[i-1] + 1)
+        regressor_values.append(5)
+    outcome_series = pd.Series(index=dt_range, data=outcome_values)
+    regressor_series = pd.Series(index=dt_range, data=regressor_values)
+    specs = modelling.ModelSpecs(
+        outcome_var=speccing.ObjectSeriesSpecs(outcome_series, "my_outcome"),
+        model=OLS,
+        lags=[1, 2],
+        #frequency=timedelta(hours=1),
+        horizon=timedelta(minutes=30),
+        regressors=[regressor_series],
+        start_of_training=start,
+        end_of_testing=start + timedelta(hours=12),
+    )
+    return modelling.ModelState(
+        modelling.create_fitted_model(specs, version="0.1", save=False), specs
+    )
 
 
 def test_make_forecast():
     """ Given a model, try to make a forecast. """
+    model, specs = create_dummy_model().split()
+    from ts_forecasting_pipeline.featuring import construct_features
+    print(construct_features(time_range="train", specs=specs))
+    features = pd.DataFrame(dict())
+    fc = forecasting.make_forecast_for(model, features, specs)
+    assert fc == 900
 
-    # TODO: test whether the forecast is made
-
-    assert 1 == 1
 
 
-def _test_uneventful_forecasts_identified(tol=0.01):
+
+
+@pytest.mark.skip(reason="Not implemented yet.")
+def test_uneventful_forecasts_identified(tol=0.01):
     """
     Test if forecast model identifies uneventful forecasts
 

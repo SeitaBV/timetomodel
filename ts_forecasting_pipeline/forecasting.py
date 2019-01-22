@@ -1,5 +1,6 @@
 from typing import Tuple
 from datetime import datetime, timedelta
+import logging
 
 from pandas import DataFrame, Series, date_range
 import pytz
@@ -13,6 +14,9 @@ from ts_forecasting_pipeline.utils.time_utils import get_closest_quarter
 """
 Functionality for making predictions per time slot.
 """
+
+
+logger = logging.getLogger(__name__)
 
 
 def make_forecast_for(
@@ -43,7 +47,7 @@ def update_model(
         current_model is None
         or time_step - specs.creation_time >= specs.remodel_frequency
     ):
-        # print("Fitting new model before predicting %s ..." % time_step)
+        logger.info("Fitting new model before predicting %s ..." % time_step)
         if current_model is not None:
             # move the model's series specs further in time
             specs.start_of_training = specs.start_of_training + specs.remodel_frequency

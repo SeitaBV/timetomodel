@@ -28,8 +28,6 @@ def create_fitted_model(
     Create a new fitted model with the given specs.
     If needed, the fitted model and specs can be persisted to file. From there, they can be loaded back with
     load_model.
-
-    TODO: frequency of 15T is still hardcoded.
     """
     if regression_frame is None:
         regression_frame = construct_features(time_range="train", specs=specs)
