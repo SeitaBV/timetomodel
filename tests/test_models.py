@@ -28,7 +28,7 @@ def create_dummy_model() -> modelling.ModelState:
         #frequency=timedelta(hours=1),
         horizon=timedelta(minutes=30),
         regressors=[regressor_series],
-        start_of_training=start,
+        start_of_training=start + timedelta(hours=1),
         end_of_testing=start + timedelta(hours=12),
     )
     return modelling.ModelState(
@@ -37,16 +37,14 @@ def create_dummy_model() -> modelling.ModelState:
 
 
 def test_make_forecast():
-    """ Given a model, try to make a forecast. """
+    """ Given a simple linear model, try to make a forecast. """
+    tolerance = 0.01
     model, specs = create_dummy_model().split()
-    from ts_forecasting_pipeline.featuring import construct_features
-    print(construct_features(time_range="train", specs=specs))
-    features = pd.DataFrame(dict())
-    fc = forecasting.make_forecast_for(model, features, specs)
-    assert fc == 900
-
-
-
+    dt = datetime(2019, 1, 22, 22, tzinfo=pytz.timezone("Europe/Amsterdam"))
+    features = pd.DataFrame(index=pd.DatetimeIndex(start=dt, end=dt, freq="15T"),
+                            data={"my_outcome_l1": 892, "my_outcome_l2": 891, "Regressor1": 5})
+    fc = forecasting.make_forecast_for(specs, features, model)
+    assert abs(fc - 893) <= tolerance
 
 
 @pytest.mark.skip(reason="Not implemented yet.")
@@ -80,7 +78,8 @@ def test_uneventful_forecasts_identified(tol=0.01):
     assert num_non_zero_errors / len(df_zero) <= tol
 
 
-def _test_forecasts_within_limits(tol=0.01):
+@pytest.mark.skip(reason="Not implemented yet.")
+def test_forecasts_within_limits(tol=0.01):
     """
 
     Test if forecasts are within limits
