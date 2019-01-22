@@ -55,18 +55,14 @@ def test_rolling_forecast():
     start = DATA_START + timedelta(hours=18)
     end = DATA_START + timedelta(hours=20)
     forecasts = forecasting.make_rolling_forecasts(start, end, specs)[0]
-    expected_values = specs.outcome_var.load_series()[18*4:20:4]
-    print("CORRECT VALUES:")
-    print(expected_values)
-    print("FORECASTS:")
-    print(forecasts)
-    assert 1 == 2
+    expected_values = specs.outcome_var.load_series().loc[start:end][:-1]
     for forecast, expected_value in zip(forecasts, expected_values):
-        print(forecast, expected_value)
-        assert abs(forecast - expected_value) > TOLERANCE
+        assert abs(forecast - expected_value) < TOLERANCE
 
 
 # TODO: test refitting the model in between?
+
+# TODO: add a regressor that is a forecast
 
 
 @pytest.mark.skip(reason="Not implemented yet.")

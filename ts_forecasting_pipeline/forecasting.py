@@ -70,7 +70,8 @@ def make_rolling_forecasts(
     model_specs: ModelSpecs,
 ) -> Tuple[pd.Series, ModelState]:
     """
-    Repeatedly call make_forecast - for all time steps the desired time window.
+    Repeatedly call make_forecast - for all time steps the desired time window
+    (end is excluding).
     The time window of the specs (training + test data) is moved forwards also step by step.
     Will fail if series specs do not allocate enough data.
     May create a model whenever the previous one is outdated.
