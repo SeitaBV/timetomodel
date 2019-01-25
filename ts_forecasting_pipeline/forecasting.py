@@ -8,7 +8,7 @@ import pytz
 from ts_forecasting_pipeline import MODEL_CLASSES, ModelState, ModelSpecs
 from ts_forecasting_pipeline.modelling import create_fitted_model
 from ts_forecasting_pipeline.featuring import construct_features, get_time_steps
-from ts_forecasting_pipeline.utils.time_utils import get_closest_quarter
+from ts_forecasting_pipeline.utils.time_utils import get_closest_quarter, timedelta_to_pandas_freq_str
 
 
 """
@@ -82,23 +82,20 @@ def make_rolling_forecasts(
     for dt in (start, end):
         if dt.tzinfo is None:
             dt.replace(tzinfo=pytz.utc)
-    training_start = get_closest_quarter(model_specs.start_of_training)
-    start = get_closest_quarter(start)
-    end = get_closest_quarter(end)
+
+    training_start = model_specs.start_of_training
+    # TODO: throw out this support and tell the user to get these things in order when loading data
+    if model_specs.frequency == timedelta(minutes=15):
+        training_start = get_closest_quarter(model_specs.start_of_training)
+        start = get_closest_quarter(start)
+        end = get_closest_quarter(end)
 
     # First, compute one big feature frame, once.
     feature_frame: pd.DataFrame = construct_features((training_start, end), model_specs)
 
-    """
-    specs.outcome_var = ObjectSeriesSpecs(
-        name=specs.outcome_var.name, data=specs.outcome_var.load_series()
-    )
-    specs.regressors = [
-        ObjectSeriesSpecs(name=r.name, data=r.load_series()) for r in specs.regressors
-    ]
-    """
+    pd_frequency = timedelta_to_pandas_freq_str(model_specs.frequency)
     values = pd.Series(
-        index=pd.date_range(start, end, freq="15T", closed="left", tz=start.tzinfo)
+        index=pd.date_range(start, end, freq=pd_frequency, closed="left", tz=start.tzinfo)
     )
     time_step = start
     model = None
@@ -109,6 +106,6 @@ def make_rolling_forecasts(
         ).split()
         features = feature_frame.loc[time_step:time_step].iloc[:, 1:]
         values[time_step] = make_forecast_for(model_specs, features, model)
-        time_step = time_step + timedelta(minutes=15)
+        time_step = time_step + model_specs.frequency
 
     return values, ModelState(model, model_specs)

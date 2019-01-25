@@ -14,7 +14,7 @@ as integration tests.
 """
 
 
-DATA_START = datetime(2019, 1, 22, 15, tzinfo=pytz.timezone("Europe/Amsterdam"))
+DATA_START = datetime(2019, 1, 22, 15, tzinfo=pytz.UTC)
 TOLERANCE = 0.01
 
 
@@ -24,7 +24,7 @@ def create_dummy_model(data_range_in_hours: int) -> modelling.ModelState:
     Use two different ways to define Series specs to test them.
     """
     dt_range = pd.date_range(
-        DATA_START, DATA_START + timedelta(hours=data_range_in_hours), freq="15T"
+        DATA_START, DATA_START + timedelta(hours=data_range_in_hours), freq="1H"
     )
     outcome_values = [0]
     regressor_values = [5]
@@ -37,11 +37,11 @@ def create_dummy_model(data_range_in_hours: int) -> modelling.ModelState:
         outcome_var=speccing.ObjectSeriesSpecs(outcome_series, "my_outcome"),
         model=OLS,
         lags=[1, 2],
-        # frequency=timedelta(hours=1),
-        horizon=timedelta(minutes=30),
+        frequency=timedelta(hours=1),
+        horizon=timedelta(minutes=120),
         remodel_frequency=timedelta(hours=48),
         regressors=[regressor_series],
-        start_of_training=DATA_START + timedelta(hours=1),
+        start_of_training=DATA_START + timedelta(hours=2),  # leaving room for NaN in lags
         end_of_testing=DATA_START + timedelta(hours=int(data_range_in_hours / 3)),
     )
     return modelling.ModelState(
@@ -54,7 +54,7 @@ def test_make_one_forecast():
     model, specs = create_dummy_model(data_range_in_hours=24).split()
     dt = datetime(2020, 1, 22, 22, tzinfo=pytz.timezone("Europe/Amsterdam"))
     features = pd.DataFrame(
-        index=pd.DatetimeIndex(start=dt, end=dt, freq="15T"),
+        index=pd.DatetimeIndex(start=dt, end=dt, freq="H"),
         data={"my_outcome_l1": 892, "my_outcome_l2": 891, "Regressor1": 5},
     )
     fc = forecasting.make_forecast_for(specs, features, model)
