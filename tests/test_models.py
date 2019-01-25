@@ -1,15 +1,9 @@
+import pytest
 import pandas as pd
 
 
-def test_make_forecast():
-    """ Given a model, try to make a forecast. """
-
-    # TODO: test whether the forecast is made
-
-    assert 1 == 1
-
-
-def _test_uneventful_forecasts_identified(tol=0.01):
+@pytest.mark.skip(reason="Not implemented yet.")
+def test_uneventful_forecasts_identified(tol=0.01):
     """
     Test if forecast model identifies uneventful forecasts
 
@@ -39,7 +33,8 @@ def _test_uneventful_forecasts_identified(tol=0.01):
     assert num_non_zero_errors / len(df_zero) <= tol
 
 
-def _test_forecasts_within_limits(tol=0.01):
+@pytest.mark.skip(reason="Not implemented yet.")
+def test_forecasts_within_limits(tol=0.01):
     """
 
     Test if forecasts are within limits

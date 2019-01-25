@@ -1,7 +1,8 @@
 from typing import Tuple
 from datetime import datetime, timedelta
+import logging
 
-from pandas import DataFrame, Series, date_range
+import pandas as pd
 import pytz
 
 from ts_forecasting_pipeline import MODEL_CLASSES, ModelState, ModelSpecs
@@ -15,14 +16,20 @@ Functionality for making predictions per time slot.
 """
 
 
+logger = logging.getLogger(__name__)
+
+
 def make_forecast_for(
-    specs: ModelSpecs, features: DataFrame, model: MODEL_CLASSES
+    specs: ModelSpecs, features: pd.DataFrame, model: MODEL_CLASSES
 ) -> float:
     """
     Make a forecast for the given feature vector.
     """
 
     y_hat = model.predict(features)
+
+    if isinstance(y_hat, pd.Series):
+        y_hat = y_hat.iloc[0]
 
     # Apply back-transformation if the output data was transformed
     if specs.transformation is not None:
@@ -35,7 +42,7 @@ def update_model(
     time_step: datetime,
     current_model: MODEL_CLASSES,
     specs: ModelSpecs,
-    feature_frame: DataFrame,
+    feature_frame: pd.DataFrame,
 ) -> ModelState:
     new_model: MODEL_CLASSES = current_model
     """ Create model if current one is outdated or not yet created."""
@@ -43,7 +50,7 @@ def update_model(
         current_model is None
         or time_step - specs.creation_time >= specs.remodel_frequency
     ):
-        # print("Fitting new model before predicting %s ..." % time_step)
+        logger.info("Fitting new model before predicting %s ..." % time_step)
         if current_model is not None:
             # move the model's series specs further in time
             specs.start_of_training = specs.start_of_training + specs.remodel_frequency
@@ -61,9 +68,10 @@ def make_rolling_forecasts(
     start: datetime,  # Start of forecast period
     end: datetime,  # End of forecast period
     model_specs: ModelSpecs,
-) -> Tuple[Series, ModelState]:
+) -> Tuple[pd.Series, ModelState]:
     """
-    Repeatedly call make_forecast - for all time steps the desired time window.
+    Repeatedly call make_forecast - for all time steps the desired time window
+    (end is excluding).
     The time window of the specs (training + test data) is moved forwards also step by step.
     Will fail if series specs do not allocate enough data.
     May create a model whenever the previous one is outdated.
@@ -79,7 +87,7 @@ def make_rolling_forecasts(
     end = get_closest_quarter(end)
 
     # First, compute one big feature frame, once.
-    feature_frame: DataFrame = construct_features((training_start, end), model_specs)
+    feature_frame: pd.DataFrame = construct_features((training_start, end), model_specs)
 
     """
     specs.outcome_var = ObjectSeriesSpecs(
@@ -89,12 +97,12 @@ def make_rolling_forecasts(
         ObjectSeriesSpecs(name=r.name, data=r.load_series()) for r in specs.regressors
     ]
     """
-    values = Series(
-        index=date_range(start, end, freq="15T", closed="left", tz=start.tzinfo)
+    values = pd.Series(
+        index=pd.date_range(start, end, freq="15T", closed="left", tz=start.tzinfo)
     )
     time_step = start
     model = None
-    print("[ts-forecasting-pipeline] Forecasting from %s to %s" % (start, end))
+    logger.info("Forecasting from %s to %s" % (start, end))
     while time_step < end:
         model, specs = update_model(
             time_step, model, model_specs, feature_frame=feature_frame

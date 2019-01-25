@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, tzinfo
 from pprint import pformat
 import json
 import warnings
+import logging
 
 import pytz
 import dateutil.parser
@@ -22,6 +23,8 @@ DEFAULT_REMODELING_FREQUENCY = timedelta(days=1)
 
 np.seterr(all="warn")
 warnings.filterwarnings("error", message="invalid value encountered in power")
+
+logger = logging.getLogger(__name__)
 
 
 class SeriesSpecs(object):
@@ -133,15 +136,15 @@ class DBSeriesSpecs(SeriesSpecs):
         self.query = query
 
     def load_series(self) -> pd.Series:
-        print(
-            "[ts-forecasting-pipeline] Reading %s data from database"
+        logger.info(
+            "Reading %s data from database"
             % self.query.column_descriptions[0]["entity"].__tablename__
         )
         """
         from sqlalchemy.dialects import postgresql
         cq = self.query.statement.compile(dialect=postgresql.dialect())
-        print("Query: %s" % str(cq))
-        print("Params: %s" % str(cq.params))
+        logger.debug("Query: %s" % str(cq))
+        logger.debug("Params: %s" % str(cq.params))
         """
 
         series_orig = pd.DataFrame(
@@ -275,7 +278,7 @@ class BoxCoxTransformation(Transformation):
                 # Resolve a numpy problem for raising a number close to 0 to a large number, i.e. -0.12^6.25
                 y = (np.zeros(*x.shape) - self.params.lambda2) / self.params.lambda3
             else:
-                print(
+                logger.warn(
                     "Back-transform failed for y(x, lambda1, lambda2, lambda3) with:\n"
                     "x = %s\n"
                     "lambda1 = %s\n"
