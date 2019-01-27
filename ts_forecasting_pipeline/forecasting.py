@@ -1,5 +1,5 @@
 from typing import Tuple
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 
 import pandas as pd
@@ -8,7 +8,7 @@ import pytz
 from ts_forecasting_pipeline import MODEL_CLASSES, ModelState, ModelSpecs
 from ts_forecasting_pipeline.modelling import create_fitted_model
 from ts_forecasting_pipeline.featuring import construct_features, get_time_steps
-from ts_forecasting_pipeline.utils.time_utils import get_closest_quarter, timedelta_to_pandas_freq_str
+from ts_forecasting_pipeline.utils.time_utils import timedelta_to_pandas_freq_str
 
 
 """
@@ -83,15 +83,8 @@ def make_rolling_forecasts(
         if dt.tzinfo is None:
             dt.replace(tzinfo=pytz.utc)
 
-    training_start = model_specs.start_of_training
-    # TODO: throw out this support and tell the user to get these things in order when loading data
-    if model_specs.frequency == timedelta(minutes=15):
-        training_start = get_closest_quarter(model_specs.start_of_training)
-        start = get_closest_quarter(start)
-        end = get_closest_quarter(end)
-
     # First, compute one big feature frame, once.
-    feature_frame: pd.DataFrame = construct_features((training_start, end), model_specs)
+    feature_frame: pd.DataFrame = construct_features((model_specs.start_of_training, end), model_specs)
 
     pd_frequency = timedelta_to_pandas_freq_str(model_specs.frequency)
     values = pd.Series(

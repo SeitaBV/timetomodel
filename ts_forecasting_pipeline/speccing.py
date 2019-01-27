@@ -12,10 +12,15 @@ import pandas as pd
 from statsmodels.base.transform import BoxCox
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Query
-
 from sqlalchemy.dialects import postgresql
+
 from ts_forecasting_pipeline.utils.debug_utils import render_query
-from ts_forecasting_pipeline.utils.time_utils import tz_aware_utc_now, timedelta_to_pandas_freq_str
+from ts_forecasting_pipeline.utils.time_utils import (
+    tz_aware_utc_now,
+    timedelta_to_pandas_freq_str,
+    timedelta_fits_into,
+)
+from ts_forecasting_pipeline.exceptions import IncompatibleModelSpecs
 
 
 DEFAULT_RATIO_TRAINING_TESTING_DATA = 2 / 3
@@ -86,7 +91,9 @@ class ObjectSeriesSpecs(SeriesSpecs):
     def load_series(self, expected_frequency: timedelta = None) -> pd.Series:
 
         if expected_frequency is not None:
-            return self.data.resample(timedelta_to_pandas_freq_str(expected_frequency)).mean()
+            return self.data.resample(
+                timedelta_to_pandas_freq_str(expected_frequency)
+            ).mean()
 
         return self.data
 
@@ -114,7 +121,11 @@ class DFFileSeriesSpecs(SeriesSpecs):
             self.original_tz = df.index.tzinfo
 
         if expected_frequency is not None:
-            return df[self.column].resample(timedelta_to_pandas_freq_str(expected_frequency)).mean()
+            return (
+                df[self.column]
+                .resample(timedelta_to_pandas_freq_str(expected_frequency))
+                .mean()
+            )
 
         return df[self.column]
 
@@ -156,7 +167,8 @@ class DBSeriesSpecs(SeriesSpecs):
         """
 
         series_orig = pd.DataFrame(
-            self.query.all(), columns=[col["name"] for col in self.query.column_descriptions]
+            self.query.all(),
+            columns=[col["name"] for col in self.query.column_descriptions],
         )
         series_orig["datetime"] = pd.to_datetime(series_orig["datetime"], utc=True)
 
@@ -195,7 +207,9 @@ class DBSeriesSpecs(SeriesSpecs):
             series.index = series.index.tz_convert(self.original_tz)
 
         if expected_frequency is not None:
-            series = series_orig.resample(timedelta_to_pandas_freq_str(expected_frequency)).mean()
+            series = series_orig.resample(
+                timedelta_to_pandas_freq_str(expected_frequency)
+            ).mean()
 
         return series["value"]
 
@@ -380,6 +394,15 @@ class ModelSpecs(object):
         else:
             self.end_of_testing = end_of_testing
         self.ratio_training_testing_data = ratio_training_testing_data
+        # check if training+testing period is compatible with frequency
+        if not timedelta_fits_into(
+            self.frequency, self.end_of_testing - self.start_of_training
+        ):
+            raise IncompatibleModelSpecs(
+                "Training & testing period (%s to %s) does not fit with frequency (%s)"
+                % (self.start_of_training, self.end_of_testing, self.frequency)
+            )
+
         if isinstance(creation_time, str):
             self.creation_time = dateutil.parser.parse(creation_time)
         elif creation_time is None:

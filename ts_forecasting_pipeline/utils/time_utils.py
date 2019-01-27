@@ -34,4 +34,27 @@ def to_15_min_lags(lags: List[timedelta]) -> List[int]:
 
 
 def timedelta_to_pandas_freq_str(resolution: timedelta) -> str:
+    """Translate a timedelta to a frequency name string used by Pandas."""
     return to_offset(resolution).freqstr
+
+
+def naive_utc_from(dt: datetime) -> datetime:
+    """Return a naive datetime, that is localised to UTC if it has a timezone."""
+    if not hasattr(dt, "tzinfo") or dt.tzinfo is None:
+        # let's hope this is the UTC time you expect
+        return dt
+    else:
+        return dt.astimezone(pytz.utc).replace(tzinfo=None)
+
+
+def round_datetime(dt, by_seconds=60):
+    """Round a datetime by some number of seconds. Can be made nicer by e.g. Pendulum"""
+    dt_naive = naive_utc_from(dt)
+    seconds = (dt_naive - dt_naive.min).total_seconds()
+    rounding = (seconds + by_seconds / 2) // by_seconds * by_seconds
+    return dt + timedelta(0, rounding - seconds, -dt.microsecond)
+
+
+def timedelta_fits_into(short_td, long_td):
+    """Return true if multiple short timedeltas fit exactly into long timedelta"""
+    return long_td.total_seconds() % short_td.total_seconds() == 0
