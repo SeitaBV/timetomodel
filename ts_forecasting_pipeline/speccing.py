@@ -12,10 +12,15 @@ import pandas as pd
 from statsmodels.base.transform import BoxCox
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Query
-
 from sqlalchemy.dialects import postgresql
+
 from ts_forecasting_pipeline.utils.debug_utils import render_query
-from ts_forecasting_pipeline.utils.time_utils import tz_aware_utc_now
+from ts_forecasting_pipeline.utils.time_utils import (
+    tz_aware_utc_now,
+    timedelta_to_pandas_freq_str,
+    timedelta_fits_into,
+)
+from ts_forecasting_pipeline.exceptions import IncompatibleModelSpecs
 
 
 DEFAULT_RATIO_TRAINING_TESTING_DATA = 2 / 3
@@ -58,7 +63,7 @@ class SeriesSpecs(object):
     def as_dict(self):
         return vars(self)
 
-    def load_series(self) -> pd.Series:
+    def load_series(self, expected_frequency: timedelta = None) -> pd.Series:
         return pd.Series()
 
     def __repr__(self):
@@ -83,7 +88,13 @@ class ObjectSeriesSpecs(SeriesSpecs):
         if self.original_tz is None:
             self.original_tz = pytz.utc
 
-    def load_series(self) -> pd.Series:
+    def load_series(self, expected_frequency: timedelta = None) -> pd.Series:
+
+        if expected_frequency is not None:
+            return self.data.resample(
+                timedelta_to_pandas_freq_str(expected_frequency)
+            ).mean()
+
         return self.data
 
 
@@ -101,13 +112,21 @@ class DFFileSeriesSpecs(SeriesSpecs):
         super().__init__(name, column, original_tz)
         self.file_path = file_path
 
-    def load_series(self) -> pd.Series:
+    def load_series(self, expected_frequency: timedelta = None) -> pd.Series:
         df: pd.DataFrame = pd.read_pickle(self.file_path)
         if df.index.tzinfo is None:
             self.original_tz = pytz.utc
             df.index = df.index.tz_localize(self.original_tz)
         else:
             self.original_tz = df.index.tzinfo
+
+        if expected_frequency is not None:
+            return (
+                df[self.column]
+                .resample(timedelta_to_pandas_freq_str(expected_frequency))
+                .mean()
+            )
+
         return df[self.column]
 
 
@@ -135,7 +154,7 @@ class DBSeriesSpecs(SeriesSpecs):
         self.db_engine = db_engine
         self.query = query
 
-    def load_series(self) -> pd.Series:
+    def load_series(self, expected_frequency: timedelta = None) -> pd.Series:
         logger.info(
             "Reading %s data from database"
             % self.query.column_descriptions[0]["entity"].__tablename__
@@ -148,7 +167,8 @@ class DBSeriesSpecs(SeriesSpecs):
         """
 
         series_orig = pd.DataFrame(
-            self.query.all(), columns=[col["name"] for col in self.query.column_descriptions]
+            self.query.all(),
+            columns=[col["name"] for col in self.query.column_descriptions],
         )
         series_orig["datetime"] = pd.to_datetime(series_orig["datetime"], utc=True)
 
@@ -173,19 +193,24 @@ class DBSeriesSpecs(SeriesSpecs):
             )
 
         # Keep the most recent observation
-        series_orig = (
+        series = (
             series_orig.sort_values(by=["horizon"], ascending=True)
             .drop_duplicates(subset=["datetime"], keep="first")
             .sort_values(by=["datetime"])
         )
-        series_orig.set_index("datetime", drop=True, inplace=True)
+        series.set_index("datetime", drop=True, inplace=True)
 
-        if series_orig.index.tzinfo is None:
+        if series.index.tzinfo is None:
             if self.original_tz is not None:
-                series_orig.index = series_orig.index.tz_localize(self.original_tz)
+                series.index = series_orig.index.tz_localize(self.original_tz)
         else:
-            series_orig.index = series_orig.index.tz_convert(self.original_tz)
-        series = series_orig.resample("15T").mean()
+            series.index = series.index.tz_convert(self.original_tz)
+
+        if expected_frequency is not None:
+            series = series_orig.resample(
+                timedelta_to_pandas_freq_str(expected_frequency)
+            ).mean()
+
         return series["value"]
 
 
@@ -305,6 +330,7 @@ class ModelSpecs(object):
     outcome_var: SeriesSpecs
     model_type: Type  # e.g. statsmodels.api.OLS, sklearn.linear_model.LinearRegression, ...
     model_params: dict
+    frequency: timedelta
     horizon: timedelta
     lags: List[int]
     regressors: List[SeriesSpecs]
@@ -331,6 +357,7 @@ class ModelSpecs(object):
         ],  # Model class and optionally initialization parameters
         start_of_training: Union[str, datetime],
         end_of_testing: Union[str, datetime],
+        frequency: timedelta,
         horizon: timedelta,
         lags: List[int] = None,
         regressors: Union[List[str], List[SeriesSpecs], List[pd.Series]] = None,
@@ -346,6 +373,7 @@ class ModelSpecs(object):
         self.outcome_var = parse_series_specs(outcome_var, "y")
         self.model_type = model[0] if isinstance(model, tuple) else model
         self.model_params = model[1] if isinstance(model, tuple) else {}
+        self.frequency = frequency
         self.horizon = horizon
         self.lags = lags
         if self.lags is None:
@@ -366,6 +394,15 @@ class ModelSpecs(object):
         else:
             self.end_of_testing = end_of_testing
         self.ratio_training_testing_data = ratio_training_testing_data
+        # check if training+testing period is compatible with frequency
+        if not timedelta_fits_into(
+            self.frequency, self.end_of_testing - self.start_of_training
+        ):
+            raise IncompatibleModelSpecs(
+                "Training & testing period (%s to %s) does not fit with frequency (%s)"
+                % (self.start_of_training, self.end_of_testing, self.frequency)
+            )
+
         if isinstance(creation_time, str):
             self.creation_time = dateutil.parser.parse(creation_time)
         elif creation_time is None:

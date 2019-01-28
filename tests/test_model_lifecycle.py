@@ -37,6 +37,7 @@ def create_dummy_model(now: datetime, save: bool = False) -> modelling.ModelStat
         outcome_var=speccing.ObjectSeriesSpecs(pd.Series({now: 2, now15: 4}), "solar"),
         model=OLS,
         lags=[],
+        frequency=timedelta(minutes=15),
         horizon=timedelta(hours=48),
         regressors=[pd.Series({now: 1, now15: 1})],
         start_of_training=now,

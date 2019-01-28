@@ -3,12 +3,20 @@ functionality to create the feature data necessary.
 """
 from typing import List, Optional, Union, Tuple
 from datetime import datetime, timedelta
+import logging
 
 import pandas as pd
 import pytz
 
 from ts_forecasting_pipeline.speccing import ModelSpecs
-from ts_forecasting_pipeline.utils.time_utils import get_closest_quarter
+from ts_forecasting_pipeline.utils.time_utils import (
+    timedelta_to_pandas_freq_str,
+    round_datetime,
+    timedelta_fits_into,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 def construct_features(
@@ -22,12 +30,23 @@ def construct_features(
     which is useful when we are predicting said step) but usually you’d say “train” or “test” to let the model specs
     determine the time steps.
     """
-    datetime_indices = get_time_steps(time_range, specs)
-
     df = pd.DataFrame()
-
     # load raw data series for the outcome data
-    df[specs.outcome_var.name] = specs.outcome_var.load_series()
+    outcome_series = specs.outcome_var.load_series(expected_frequency=specs.frequency)
+
+    # check if data is usable TODO: this can become its own function
+    if outcome_series.index.freqstr != timedelta_to_pandas_freq_str(specs.frequency):
+        raise Exception(
+            "Loaded data for %s has different frequency (%s) than used in model (%s)."
+            % (
+                specs.outcome_var.name,
+                outcome_series.index.freqstr,
+                timedelta_to_pandas_freq_str(specs.frequency),
+            )
+        )
+    df[specs.outcome_var.name] = outcome_series
+
+    datetime_indices = get_time_steps(time_range, specs)
 
     # perform the custom transformation, if needed, and store the transformation parameters to be able to back-transform
     if specs.transformation is not None:
@@ -37,7 +56,18 @@ def construct_features(
 
     # load raw data series for the regressors
     for reg_spec in specs.regressors:
-        df[reg_spec.name] = reg_spec.load_series()
+        df[reg_spec.name] = reg_spec.load_series(expected_frequency=specs.frequency)
+        if outcome_series.index.freqstr != timedelta_to_pandas_freq_str(
+            specs.frequency
+        ):
+            raise Exception(
+                "Loaded data for %s has different frequency (%s) than used in model (%s)."
+                % (
+                    reg_spec.name,
+                    outcome_series.index.freqstr,
+                    timedelta_to_pandas_freq_str(specs.frequency),
+                )
+            )
 
     # perform the custom transformation, if needed
     if specs.regressor_transformation is not None:
@@ -80,7 +110,18 @@ def construct_features(
 def get_time_steps(
     time_range: Union[str, datetime, Tuple[datetime, datetime]], specs: ModelSpecs
 ) -> pd.DatetimeIndex:
-    """ get relevant datetime indices to build features for."""
+    """ Get relevant datetime indices to build features for.
+
+        The time_range parameter can be one or two datetime objects, in which case this function builds a DateTimeIndex.
+        It can also be one of two strings: "train" or "test". In this situation, this function creates a training or
+        testing period from model specs.
+
+        TODO: we can check (and complain) if datetime objects are incompatible to specs.frequency
+              e.g. if round_datetime(dt, by_seconds=specs.frequency.total_seconds()) != dt:
+                       raise Exception("%s is not compatible with frequency %s." % (dt, specs.frequency))
+              We have to discuss if we allow to use any time to start intervals or rather 15:00, 15:15, 15:30 etc ...
+    """
+    # check valid time_range parameter
     if not (
         isinstance(time_range, datetime)
         or (
@@ -91,39 +132,51 @@ def get_time_steps(
         or (isinstance(time_range, str) and time_range in ("train", "test"))
     ):
         raise Exception(
-            "Purpose for dataframe construction needs to be either 'train', 'test',"
+            "Goal for DateTimeIndex construction needs to be either a string ('train', 'test'),"
             "a tuple of two datetime objects or one datetime object."
         )
 
-    if isinstance(time_range, datetime):
-        return pd.date_range(time_range, time_range, closed="left", freq="15T")
-    elif isinstance(time_range, tuple):
-        return pd.date_range(time_range[0], time_range[1], closed="left", freq="15T")
+    pd_frequency = timedelta_to_pandas_freq_str(specs.frequency)
 
+    # easy cases: one or two datetime objects
+    if isinstance(time_range, datetime):
+        return pd.date_range(time_range, time_range, closed="left", freq=pd_frequency)
+    elif isinstance(time_range, tuple):
+        if not timedelta_fits_into(specs.frequency, time_range[1] - time_range[0]):
+            raise Exception(
+                "Start & end period (%s to %s) does not cleanly fit a multiple of the model frequency (%s)"
+                % (time_range[0], time_range[1], specs.frequency)
+            )
+        return pd.date_range(
+            time_range[0], time_range[1], closed="left", freq=pd_frequency
+        )
+
+    # special cases: "train" or "test" - we have to calculate from model specs
     length_of_data = specs.end_of_testing - specs.start_of_training
-    datetime_indices = None
     if time_range == "train":
-        end_of_training = get_closest_quarter(
+        end_of_training = (
             specs.start_of_training + length_of_data * specs.ratio_training_testing_data
         )
-        # print("Start of training: %s" % specs.start_of_training)
-        # print("End of training: %s" % end_of_training)
-        datetime_indices = pd.date_range(
-            specs.start_of_training, end_of_training, freq="15T"
+        end_of_training = round_datetime(
+            end_of_training, specs.frequency.total_seconds()
+        )
+        logger.info("Start of training: %s" % specs.start_of_training)
+        logger.info("End of training: %s" % end_of_training)
+        return pd.date_range(
+            specs.start_of_training, end_of_training, freq=pd_frequency
         )
     elif time_range == "test":
-        start_of_testing = get_closest_quarter(
+        start_of_testing = (
             specs.start_of_training
             + (length_of_data * specs.ratio_training_testing_data)
-            + timedelta(minutes=15)
+            + specs.frequency
         )
-        # print("Start of testing: %s" % start_of_testing)
-        # print("End of testing: %s" % specs.end_of_testing)
-        datetime_indices = pd.date_range(
-            start_of_testing, specs.end_of_testing, freq="15T"
+        start_of_testing = round_datetime(
+            start_of_testing, specs.frequency.total_seconds()
         )
-
-    return datetime_indices
+        logger.info("Start of testing: %s" % start_of_testing)
+        logger.info("End of testing: %s" % specs.end_of_testing)
+        return pd.date_range(start_of_testing, specs.end_of_testing, freq=pd_frequency)
 
 
 def lag_to_suffix(lag: int) -> str:
@@ -137,9 +190,7 @@ def lag_to_suffix(lag: int) -> str:
     return str_lag
 
 
-def add_lags(
-    df: pd.DataFrame, column: str, lags: List[int], name_as: str = "quarter_hour"
-) -> Optional[pd.DataFrame]:
+def add_lags(df: pd.DataFrame, column: str, lags: List[int]) -> Optional[pd.DataFrame]:
     """
     Creates lag columns for a column in the dataframe. Lags are in fifteen minute steps (15T).
     Positive values are lags, while negative values are future values.
@@ -168,14 +219,6 @@ def add_lags(
     )
 
     lag_names = [l for l in lags]
-    if name_as == "hour":
-        lag_names = [int(l / 4) for l in lags]
-    if name_as == "day":
-        lag_names = [int(l / 96) for l in lags]
-    if name_as == "week":
-        lag_names = [int(l / 96 / 7) for l in lags]
-    if name_as == "year":
-        lag_names = [int(l / 96 / 365) for l in lags]
 
     for lag in lags:
         lag_name = lag_names[lags.index(lag)]
