@@ -1,5 +1,7 @@
 # Time series forecasting pipeline
 
+[![Build Status](https://travis-ci.org/SeitaBV/ts-forecasting-pipeline.svg?branch=master)](https://travis-ci.org/SeitaBV/ts-forecasting-pipeline)
+
 This repository contains code to support time series forecasting.
 
 It contains functionality that is both useful for data & model exploration
