@@ -24,9 +24,6 @@ def test_timedelta_to_pd_freq_str():
     assert timedelta_to_pandas_freq_str(timedelta(hours=1)) == "H"
     assert timedelta_to_pandas_freq_str(timedelta(hours=2)) == "2H"
     assert timedelta_to_pandas_freq_str(timedelta(hours=26)) == "26H"
-    assert timedelta_to_pandas_freq_str(timedelta(hours=1)) == "H"
-    assert timedelta_to_pandas_freq_str(timedelta(hours=1)) == "H"
-    assert timedelta_to_pandas_freq_str(timedelta(hours=1)) == "H"
     assert timedelta_to_pandas_freq_str(timedelta(days=1, hours=2)) == "26H"
     assert timedelta_to_pandas_freq_str(timedelta(days=1)) == "D"
 
