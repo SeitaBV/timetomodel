@@ -34,7 +34,11 @@ def to_15_min_lags(lags: List[timedelta]) -> List[int]:
 
 
 def timedelta_to_pandas_freq_str(resolution: timedelta) -> str:
-    """Translate a timedelta to a frequency name string used by Pandas."""
+    """Translate a timedelta to a frequency name string used by Pandas.
+
+    Unlike timedelta objects, calendar rules matter here, so safest is to pass UTC or naive datetimes.
+    See also https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#dateoffset-objects
+    """
     return to_offset(resolution).freqstr
 
 

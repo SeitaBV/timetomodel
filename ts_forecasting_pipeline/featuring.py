@@ -169,7 +169,7 @@ def get_time_steps(
         start_of_testing = (
             specs.start_of_training
             + (length_of_data * specs.ratio_training_testing_data)
-            + timedelta(minutes=15)
+            + specs.frequency
         )
         start_of_testing = round_datetime(
             start_of_testing, specs.frequency.total_seconds()
