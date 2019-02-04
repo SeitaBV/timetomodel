@@ -185,9 +185,8 @@ class DBSeriesSpecs(SeriesSpecs):
     """Define how to query a database for time series values.
     This works via a SQLAlchemy query.
     This query should return the needed information for the forecasting pipeline:
-    A "datetime" column (which will be set as index) and the values column (named by name or column,
-    see SeriesSpecs.__init__, defaults to "value"). For example:
-    TODO: show an example"""
+    A "datetime" column (which will be set as index of the series) and a "value" column.
+    """
 
     db: Engine
     query: Query

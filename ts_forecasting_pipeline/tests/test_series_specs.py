@@ -7,14 +7,14 @@ import numpy as np
 from ts_forecasting_pipeline.speccing import ObjectSeriesSpecs
 
 
-def test_load_objects_without_datetime_index():
+def test_load_series_without_datetime_index():
     with pytest.raises(Exception) as e_info:
         s = ObjectSeriesSpecs(data=pd.Series([1, 2, 3]), name="mydata")
         s.load_series(expected_frequency=timedelta(hours=1))
     assert "DatetimeIndex" in str(e_info.value)
 
 
-def test_load_objects():
+def test_load_series():
     dt = datetime(2019, 1, 29, 15, 15)
     s = ObjectSeriesSpecs(
         data=pd.Series(
@@ -31,7 +31,7 @@ def test_load_objects():
     )
 
 
-def test_load_objects_with_frequency_resampling():
+def test_load_series_with_frequency_resampling():
     dt = datetime(2019, 1, 29, 15, 15)
     s = ObjectSeriesSpecs(
         data=pd.Series(
@@ -45,7 +45,7 @@ def test_load_objects_with_frequency_resampling():
     assert series[0] == 2  # the mean
 
 
-def test_load_objects_with_custom_frequency_resampling():
+def test_load_series_with_custom_frequency_resampling():
     dt = datetime(2019, 1, 29, 15, 15)
     s = ObjectSeriesSpecs(
         data=pd.Series(
@@ -64,21 +64,21 @@ def test_load_objects_with_custom_frequency_resampling():
     assert series[0] == 6  # the sum
 
 
-def test_load_objects_without_data():
+def test_load_series_without_data():
     dt = datetime(2019, 1, 29, 15, 15)
     s = ObjectSeriesSpecs(
         data=pd.Series(
             index=pd.date_range(dt, dt + timedelta(minutes=30), freq="15T"),
-            data=[],
+            data=[np.nan, np.nan, np.nan],
         ),
         name="mydata",
     )
     with pytest.raises(Exception) as e_info:
         s.load_series(expected_frequency=timedelta(hours=1))
-    assert "No values" in str(e_info.value)
+    assert "Nan values" in str(e_info.value)
 
 
-def test_load_objects_without_data():
+def test_load_series_with_missing_data():
     dt = datetime(2019, 1, 29, 15, 15)
     s = ObjectSeriesSpecs(
         data=pd.Series(
