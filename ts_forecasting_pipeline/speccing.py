@@ -4,6 +4,7 @@ from pprint import pformat
 import json
 import warnings
 import logging
+import inspect
 
 import pytz
 import dateutil.parser
@@ -36,7 +37,7 @@ class SeriesSpecs(object):
     """Describes a time series (e.g. a pandas Series).
     In essence, a column in the regression frame, filled with numbers.
 
-    Using this class, the column will be filled with NaN values.
+    Using this base class, the column will be filled with NaN values.
 
     If you have data to be loaded in automatically, you should be using one of the subclasses, which allow to describe
     or pass in an actual data source to be loaded.
@@ -47,24 +48,86 @@ class SeriesSpecs(object):
 
     # The name in the resulting feature frame, and possibly in the saved model specs (named by outcome var)
     name: str
-    # The name in the data source, if source is a pandas DataFrame or database Table - if None, the name will be tried
+    # The name of the data column in the data source. If None, the name will be tried.
     column: Optional[str]
     # timezone of the data - useful when de-serializing (e.g. pandas serialises to UTC)
     original_tz: tzinfo
 
-    def __init__(self, name: str, column: str = None, original_tz: tzinfo = None):
+    def __init__(self, name: str, original_tz: tzinfo = None):
         self.name = name
-        self.column = column
-        if self.column is None:
-            self.column = name
         self.original_tz = original_tz
         self.__series_type__ = self.__class__.__name__
 
     def as_dict(self):
         return vars(self)
 
-    def load_series(self, expected_frequency: timedelta = None) -> pd.Series:
+    def _load_series(self) -> pd.Series:
+        """Subclasses overwrite this function to get the raw data"""
         return pd.Series()
+
+    def load_series(
+        self, expected_frequency: timedelta, resample_config: dict = None
+    ) -> pd.Series:
+        """Load the series data.
+           The actual implementation how to load is deferred to _load_series. Overwrite that for new subclasses.
+           The expected frequency is used to check compatibility of series data with model specs.
+           This function resamples data if the frequency is not compatible.
+           It is possible to customise resampling (without that, we aggregate means after default resampling.
+           Pass in a `resampling_config` dict with an aggregation method name and kw params to pass into `resample`.
+           For example:
+
+           `resampling_config={"closed": "left", "aggregation": "sum"}`
+        """
+        data = self._load_series()
+
+        # check if data has a DateTimeIndex
+        if not isinstance(data.index, pd.DatetimeIndex):
+            raise IncompatibleModelSpecs(
+                "Loaded series has no DatetimeIndex, but %s" % type(data.index).__name__
+            )
+
+        # make sure we have a time zone (default to UTC), save original time zone
+        if data.index.tzinfo is None:
+            self.original_tz = pytz.utc
+            data.index = data.index.tz_localize(self.original_tz)
+        else:
+            self.original_tz = data.index.tzinfo
+
+        # Raise error if data is empty or contains nan values
+        if data.empty:
+            raise ValueError(
+                "No values found in requested %s data. It's no use to continue I'm afraid."
+            )
+        if data.isnull().values.any():
+            raise ValueError(
+                "Nan values found in the requested %s data. It's no use to continue I'm afraid."
+            )
+
+        # check if time series frequency is okay, if not then resample
+        if data.index.freq.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
+            if resample_config is None:
+                data = data.resample(
+                    timedelta_to_pandas_freq_str(expected_frequency)
+                ).mean()
+            else:
+                data_resampler = data.resample(
+                    timedelta_to_pandas_freq_str(expected_frequency),
+                    **{k: v for k, v in resample_config.items() if k != "aggregation"}
+                )
+                if "aggregation" not in resample_config:
+                    data = data_resampler.mean()
+                else:
+                    for agg_name, agg_method in inspect.getmembers(data_resampler, inspect.ismethod):
+                        if resample_config["aggregation"] == agg_name:
+                            data = agg_method()
+                            break
+                    else:
+                        raise IncompatibleModelSpecs(
+                            "Cannot find resampling aggregation %s on %s"
+                            % (resample_config["aggregation"], data_resampler)
+                        )
+
+        return data
 
     def __repr__(self):
         return "%s: <%s>" % (self.__class__.__name__, self.as_dict())
@@ -73,29 +136,26 @@ class SeriesSpecs(object):
 class ObjectSeriesSpecs(SeriesSpecs):
     """
     Spec for a pd.Series object that is being passed in and is stored directly in the specs.
-    The data is not mutatable after creation.
-    Note: The column argument is not used, as the series has only one column.
     """
 
     data: pd.Series
 
-    def __init__(
-        self, data: pd.Series, name: str, column: str = None, original_tz: tzinfo = None
-    ):
-        super().__init__(name, None, original_tz)
+    def __init__(self, data: pd.Series, name: str, original_tz: tzinfo = None):
+        super().__init__(name, original_tz)
+        if not isinstance(data.index, pd.DatetimeIndex):
+            raise IncompatibleModelSpecs(
+                "Please provide a DatetimeIndex. Only found %s."
+                % type(data.index).__name__
+            )
         self.data = data
-        self.original_tz = data.index.tzinfo
-        if self.original_tz is None:
-            self.original_tz = pytz.utc
 
-    def load_series(self, expected_frequency: timedelta = None) -> pd.Series:
-
-        if expected_frequency is not None:
-            return self.data.resample(
-                timedelta_to_pandas_freq_str(expected_frequency)
-            ).mean()
-
+    def _load_series(self) -> pd.Series:
         return self.data
+
+
+class CSVFileSeriesSpecs(SeriesSpecs):
+    # TODO: Make this
+    pass
 
 
 class DFFileSeriesSpecs(SeriesSpecs):
@@ -105,27 +165,17 @@ class DFFileSeriesSpecs(SeriesSpecs):
     """
 
     file_path: str
+    column: str
 
     def __init__(
         self, file_path: str, name: str, column: str = None, original_tz: tzinfo = None
     ):
-        super().__init__(name, column, original_tz)
+        super().__init__(name, original_tz)
         self.file_path = file_path
+        self.column = column
 
-    def load_series(self, expected_frequency: timedelta = None) -> pd.Series:
+    def _load_series(self, expected_frequency: timedelta = None) -> pd.Series:
         df: pd.DataFrame = pd.read_pickle(self.file_path)
-        if df.index.tzinfo is None:
-            self.original_tz = pytz.utc
-            df.index = df.index.tz_localize(self.original_tz)
-        else:
-            self.original_tz = df.index.tzinfo
-
-        if expected_frequency is not None:
-            return (
-                df[self.column]
-                .resample(timedelta_to_pandas_freq_str(expected_frequency))
-                .mean()
-            )
 
         return df[self.column]
 
@@ -147,33 +197,27 @@ class DBSeriesSpecs(SeriesSpecs):
         db_engine: Engine,
         query: Query,
         name: str = "value",
-        column: str = None,
         original_tz: tzinfo = pytz.utc,  # postgres stores naive datetimes
     ):
-        super().__init__(name, column, original_tz)
+        super().__init__(name, original_tz)
         self.db_engine = db_engine
         self.query = query
 
-    def load_series(self, expected_frequency: timedelta = None) -> pd.Series:
+    def _load_series(self, expected_frequency: timedelta = None) -> pd.Series:
         logger.info(
             "Reading %s data from database"
             % self.query.column_descriptions[0]["entity"].__tablename__
         )
-        """
-        from sqlalchemy.dialects import postgresql
-        cq = self.query.statement.compile(dialect=postgresql.dialect())
-        logger.debug("Query: %s" % str(cq))
-        logger.debug("Params: %s" % str(cq.params))
-        """
 
-        series_orig = pd.DataFrame(
+        # TODO: call the var a frame if it is one
+        df = pd.DataFrame(
             self.query.all(),
             columns=[col["name"] for col in self.query.column_descriptions],
         )
-        series_orig["datetime"] = pd.to_datetime(series_orig["datetime"], utc=True)
+        df["datetime"] = pd.to_datetime(df["datetime"], utc=True)
 
         # Raise error if data is empty or contains nan values
-        if series_orig.empty:
+        if df.empty:
             raise ValueError(
                 "No values found in database for the requested %s data. It's no use to continue I'm afraid."
                 " Here's a print-out of the database query:\n\n%s\n\n"
@@ -182,7 +226,7 @@ class DBSeriesSpecs(SeriesSpecs):
                     render_query(self.query.statement, dialect=postgresql.dialect()),
                 )
             )
-        if series_orig.isnull().values.any():
+        if df.isnull().values.any():
             raise ValueError(
                 "Nan values found in database for the requested %s data. It's no use to continue I'm afraid."
                 " Here's a print-out of the database query:\n\n%s\n\n"
@@ -192,9 +236,10 @@ class DBSeriesSpecs(SeriesSpecs):
                 )
             )
 
+        # TODO: this is a post-processing function - move to func store maybe
         # Keep the most recent observation
         series = (
-            series_orig.sort_values(by=["horizon"], ascending=True)
+            df.sort_values(by=["horizon"], ascending=True)
             .drop_duplicates(subset=["datetime"], keep="first")
             .sort_values(by=["datetime"])
         )
@@ -202,12 +247,12 @@ class DBSeriesSpecs(SeriesSpecs):
 
         if series.index.tzinfo is None:
             if self.original_tz is not None:
-                series.index = series_orig.index.tz_localize(self.original_tz)
+                series.index = df.index.tz_localize(self.original_tz)
         else:
             series.index = series.index.tz_convert(self.original_tz)
 
         if expected_frequency is not None:
-            series = series_orig.resample(
+            series = df.resample(
                 timedelta_to_pandas_freq_str(expected_frequency)
             ).mean()
 
@@ -247,6 +292,7 @@ class Transformation(object):
         return y
 
 
+# TODO: move these somewhere, maybe a func store?
 class BoxCoxTransformation(Transformation):
     """Box-Cox transformation.
 

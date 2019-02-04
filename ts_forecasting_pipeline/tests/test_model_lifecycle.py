@@ -10,6 +10,10 @@ from statsmodels.api import OLS
 from ts_forecasting_pipeline import ModelState, speccing, modelling, serializing
 from ts_forecasting_pipeline.utils.time_utils import get_most_recent_quarter, tz_aware_utc_now
 
+"""
+These tests should test model lifecycle, but are not very relevant right now, as that functionality still needs to 
+be built (if anyone should actually need it - a model spec can also nicely live as code that can be referred to later
+when needed)."""
 
 serializing.MODEL_DIR = "test_models"
 
@@ -33,13 +37,14 @@ def create_dummy_model(now: datetime, save: bool = False) -> modelling.ModelStat
     Create a dummy model. Try out two different ways to define Series specs.
     """
     now15 = now + timedelta(minutes=15)
+    dt_index = pd.date_range(start=now, end=now15, freq="15T")
     specs = modelling.ModelSpecs(
-        outcome_var=speccing.ObjectSeriesSpecs(pd.Series({now: 2, now15: 4}), "solar"),
+        outcome_var=speccing.ObjectSeriesSpecs(pd.Series(index=dt_index, data={now: 2, now15: 4}), "solar"),
         model=OLS,
         lags=[],
         frequency=timedelta(minutes=15),
         horizon=timedelta(hours=48),
-        regressors=[pd.Series({now: 1, now15: 1})],
+        regressors=[pd.Series(index=dt_index, data={now: 1, now15: 1})],
         start_of_training=now,
         end_of_testing=now15,
     )
