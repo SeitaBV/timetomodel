@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple, Type, Union
+from typing import List, Optional, Tuple, Type, Union, Dict, Any
 from datetime import datetime, timedelta, tzinfo
 from pprint import pformat
 import json
@@ -57,11 +57,21 @@ class SeriesSpecs(object):
     original_tz: tzinfo
     # Custom transformation to perform on the outcome data. Called after relevant SeriesSpecs were resolved.
     transformation: Optional[Transformation]
+    # Custom resampling parameters. All parameters apply to pd.resample, only "aggregation" is the name
+    # of the aggregation function to be called of the resulting resampler
+    resampling_config: Dict[str, Any]
 
-    def __init__(self, name: str, original_tz: Optional[tzinfo] = None, transformation: Optional[Transformation] = None):
+    def __init__(
+        self,
+        name: str,
+        original_tz: Optional[tzinfo] = None,
+        transformation: Optional[Transformation] = None,
+        resampling_config: Dict[str, Any] = None,
+    ):
         self.name = name
         self.original_tz = original_tz
         self.transformation = transformation
+        self.resampling_config = resampling_config
         self.__series_type__ = self.__class__.__name__
 
     def as_dict(self):
@@ -72,7 +82,7 @@ class SeriesSpecs(object):
         return pd.Series()
 
     def load_series(
-        self, expected_frequency: timedelta, resample_config: dict = None
+        self, expected_frequency: timedelta
     ) -> pd.Series:
         """Load the series data, check compatibility of series data with model specs and transform, if needed.
 
@@ -80,8 +90,8 @@ class SeriesSpecs(object):
 
            This function resamples data if the frequency is not compatible.
            It is possible to customise resampling (without that, we aggregate means after default resampling.
-           Pass in a `resampling_config` dict with an aggregation method name and kw params to pass into `resample`.
-           For example:
+           Pass in a `resampling_config` to the class with an aggregation method name and
+           kw params to pass into `resample`. For example:
 
            `resampling_config={"closed": "left", "aggregation": "sum"}`
         """
@@ -112,31 +122,39 @@ class SeriesSpecs(object):
 
         # check if time series frequency is okay, if not then resample
         if data.index.freq.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
-            if resample_config is None:
-                data = data.resample(
-                    timedelta_to_pandas_freq_str(expected_frequency)
-                ).mean()
-            else:
-                data_resampler = data.resample(
-                    timedelta_to_pandas_freq_str(expected_frequency),
-                    **{k: v for k, v in resample_config.items() if k != "aggregation"}
-                )
-                if "aggregation" not in resample_config:
-                    data = data_resampler.mean()
-                else:
-                    for agg_name, agg_method in inspect.getmembers(data_resampler, inspect.ismethod):
-                        if resample_config["aggregation"] == agg_name:
-                            data = agg_method()
-                            break
-                    else:
-                        raise IncompatibleModelSpecs(
-                            "Cannot find resampling aggregation %s on %s"
-                            % (resample_config["aggregation"], data_resampler)
-                        )
+            data = self.resample_data(data, expected_frequency)
 
         if self.transformation is not None:
-            data = pd.Series(index=data.index, data=self.transformation.transform(data.values))
+            data = pd.Series(
+                index=data.index, data=self.transformation.transform(data.values)
+            )
 
+        return data
+
+    def resample_data(self, data, expected_frequency) -> pd.Series:
+        if self.resampling_config is None:
+            data = data.resample(
+                timedelta_to_pandas_freq_str(expected_frequency)
+            ).mean()
+        else:
+            data_resampler = data.resample(
+                timedelta_to_pandas_freq_str(expected_frequency),
+                **{k: v for k, v in self.resampling_config.items() if k != "aggregation"}
+            )
+            if "aggregation" not in self.resampling_config:
+                data = data_resampler.mean()
+            else:
+                for agg_name, agg_method in inspect.getmembers(
+                    data_resampler, inspect.ismethod
+                ):
+                    if self.resampling_config["aggregation"] == agg_name:
+                        data = agg_method()
+                        break
+                else:
+                    raise IncompatibleModelSpecs(
+                        "Cannot find resampling aggregation %s on %s"
+                        % (self.resampling_config["aggregation"], data_resampler)
+                    )
         return data
 
     def __repr__(self):
@@ -150,8 +168,15 @@ class ObjectSeriesSpecs(SeriesSpecs):
 
     data: pd.Series
 
-    def __init__(self, data: pd.Series, name: str, original_tz: Optional[tzinfo] = None, transformation: Optional[Transformation] = None):
-        super().__init__(name, original_tz, transformation)
+    def __init__(
+        self,
+        data: pd.Series,
+        name: str,
+        original_tz: Optional[tzinfo] = None,
+        transformation: Optional[Transformation] = None,
+        resampling_config: Dict[str, Any] = None,
+    ):
+        super().__init__(name, original_tz, transformation, resampling_config)
         if not isinstance(data.index, pd.DatetimeIndex):
             raise IncompatibleModelSpecs(
                 "Please provide a DatetimeIndex. Only found %s."
@@ -178,9 +203,15 @@ class DFFileSeriesSpecs(SeriesSpecs):
     column: str
 
     def __init__(
-        self, file_path: str, name: str, column: str = None, original_tz: Optional[tzinfo] = None, transformation: Transformation = None
+        self,
+        file_path: str,
+        name: str,
+        column: str = None,
+        original_tz: Optional[tzinfo] = None,
+        transformation: Transformation = None,
+        resampling_config: Dict[str, Any] = None,
     ):
-        super().__init__(name, original_tz, transformation)
+        super().__init__(name, original_tz, transformation, resampling_config)
         self.file_path = file_path
         self.column = column
 
@@ -207,9 +238,10 @@ class DBSeriesSpecs(SeriesSpecs):
         query: Query,
         name: str = "value",
         original_tz: Optional[tzinfo] = pytz.utc,  # postgres stores naive datetimes
-        transformation: Transformation = None
+        transformation: Transformation = None,
+            resampling_config: Dict[str, Any] = None,
     ):
-        super().__init__(name, original_tz, transformation)
+        super().__init__(name, original_tz, transformation, resampling_config)
         self.db_engine = db_engine
         self.query = query
 

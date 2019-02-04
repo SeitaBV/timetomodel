@@ -46,6 +46,22 @@ def test_load_series_with_frequency_resampling():
     assert series[0] == 2  # the mean
 
 
+def test_load_series_with_not_existing_custom_frequency_resampling():
+    dt = datetime(2019, 1, 29, 15, 15)
+    s = ObjectSeriesSpecs(
+        data=pd.Series(
+            index=pd.date_range(dt, dt + timedelta(minutes=30), freq="15T"),
+            data=[1, 2, 3],
+        ),
+        name="mydata",
+        resampling_config={"aggregation": "GGG"}
+    )
+
+    with pytest.raises(Exception) as e_info:
+        s.load_series(expected_frequency=timedelta(hours=1))
+    assert "Cannot find resampling aggregation GGG" in str(e_info.value)
+
+
 def test_load_series_with_custom_frequency_resampling():
     dt = datetime(2019, 1, 29, 15, 15)
     s = ObjectSeriesSpecs(
@@ -54,13 +70,10 @@ def test_load_series_with_custom_frequency_resampling():
             data=[1, 2, 3],
         ),
         name="mydata",
+        resampling_config={"aggregation": "sum"}
     )
 
-    with pytest.raises(Exception) as e_info:
-        s.load_series(expected_frequency=timedelta(hours=1), resample_config={"aggregation": "GGG"})
-    assert "Cannot find resampling aggregation GGG" in str(e_info.value)
-
-    series = s.load_series(expected_frequency=timedelta(hours=1), resample_config={"aggregation": "sum"})
+    series = s.load_series(expected_frequency=timedelta(hours=1))
     assert len(series) == 1
     assert series[0] == 6  # the sum
 
