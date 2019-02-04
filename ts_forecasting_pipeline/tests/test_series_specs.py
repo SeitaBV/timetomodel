@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 
 from ts_forecasting_pipeline.speccing import ObjectSeriesSpecs
+from ts_forecasting_pipeline.tests.utils import MyMultiplicationTransformation
 
 
 def test_load_series_without_datetime_index():
@@ -90,5 +91,23 @@ def test_load_series_with_missing_data():
     with pytest.raises(Exception) as e_info:
         s.load_series(expected_frequency=timedelta(hours=1))
     assert "Nan values" in str(e_info.value)
+
+
+def test_load_series_with_transformation():
+    dt = datetime(2019, 1, 29, 15, 15)
+    s = ObjectSeriesSpecs(
+        data=pd.Series(
+            index=pd.date_range(dt, dt + timedelta(minutes=30), freq="15T"),
+            data=[1, 2, 3],
+        ),
+        name="mydata",
+        transformation=MyMultiplicationTransformation(factor=11)
+    )
+    assert (
+        s.load_series(expected_frequency=timedelta(minutes=15)).loc[
+            dt + timedelta(minutes=15)
+        ]
+        == 2 * 11
+    )
 
 

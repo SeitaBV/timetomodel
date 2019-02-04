@@ -86,19 +86,19 @@ def test_create_and_load_model():
     specs = model_state.specs
     assert specs.creation_time > tz_aware_utc_now() - timedelta(minutes=5)
     assert isinstance(specs.outcome_var, speccing.ObjectSeriesSpecs)
-    assert specs.outcome_var.load_series().index[0] == now
-    assert specs.outcome_var.load_series().index[1] == now15
+    assert specs.outcome_var.load_series(expected_frequency=timedelta(minutes=15)).index[0] == now
+    assert specs.outcome_var.load_series(expected_frequency=timedelta(minutes=15)).index[1] == now15
     assert specs.outcome_var.name == "solar"
     for r in specs.regressors:
         assert isinstance(r, speccing.ObjectSeriesSpecs)
-        assert r.load_series().index[1] == now15
+        assert r.load_series(expected_frequency=timedelta(minutes=15)).index[1] == now15
     assert specs.start_of_training < specs.end_of_testing
 
 
 def test_unsupported_serialisation_of_transformations():
     now = get_most_recent_quarter()
     model_state = create_dummy_model(now=now, save=False)
-    model_state.specs.transformation = lambda df: pd.DataFrame()
+    model_state.specs.outcome_var.transformation = lambda df: pd.DataFrame()
     with pytest.raises(Exception) as e_info:
         modelling.save_model(model_state, "0.1")
     print(e_info)

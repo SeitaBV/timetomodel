@@ -20,7 +20,9 @@ TOLERANCE = 0.01
 
 def test_make_one_forecast():
     """ Given a simple linear model, try to make a forecast. """
-    model, specs = test_utils.create_dummy_model(DATA_START, data_range_in_hours=24).split()
+    model, specs = test_utils.create_dummy_model_state(
+        DATA_START, data_range_in_hours=24
+    ).split()
     dt = datetime(2020, 1, 22, 22, tzinfo=pytz.timezone("Europe/Amsterdam"))
     features = pd.DataFrame(
         index=pd.DatetimeIndex(start=dt, end=dt, freq="H"),
@@ -30,13 +32,37 @@ def test_make_one_forecast():
     assert abs(fc - 893) <= TOLERANCE
 
 
+def test_make_one_forecast_with_transformation():
+    """ Given a simple linear model with a transformation, try to make a forecast. """
+    model, specs = test_utils.create_dummy_model_state(
+        DATA_START,
+        data_range_in_hours=24,
+        outcome_transformation=test_utils.MyAdditionTransformation(addition=7),
+    ).split()
+    dt = datetime(2020, 1, 22, 22, tzinfo=pytz.timezone("Europe/Amsterdam"))
+    features = pd.DataFrame(
+        index=pd.DatetimeIndex(start=dt, end=dt, freq="H"),
+        data={
+            "my_outcome_l1": specs.outcome_var.transformation.transform(892),
+            "my_outcome_l2": specs.outcome_var.transformation.transform(891),
+            "Regressor1": 5,
+        },
+    )
+    fc = forecasting.make_forecast_for(specs, features, model)
+    assert abs(fc - 893) <= TOLERANCE
+
+
 def test_rolling_forecast():
     """Using the simple linear model, create a rolling forecast"""
-    model, specs = test_utils.create_dummy_model(DATA_START, data_range_in_hours=24).split()
+    model, specs = test_utils.create_dummy_model_state(
+        DATA_START, data_range_in_hours=24
+    ).split()
     start = DATA_START + timedelta(hours=18)
     end = DATA_START + timedelta(hours=20)
     forecasts = forecasting.make_rolling_forecasts(start, end, specs)[0]
-    expected_values = specs.outcome_var.load_series(expected_frequency=timedelta(hours=1)).loc[start:end][:-1]
+    expected_values = specs.outcome_var.load_series(
+        expected_frequency=timedelta(hours=1)
+    ).loc[start:end][:-1]
     for forecast, expected_value in zip(forecasts, expected_values):
         assert abs(forecast - expected_value) < TOLERANCE
 
@@ -46,20 +72,23 @@ def test_rolling_forecast_with_refitting(caplog):
     We'll test if the expected number of re-fittings happened.
     Also, the model we end up with should not be the one we started with."""
     caplog.set_level(logging.INFO, logger="ts_forecasting_pipeline.forecasting")
-    model, specs = test_utils.create_dummy_model(DATA_START, data_range_in_hours=192).split()
+    model, specs = test_utils.create_dummy_model_state(
+        DATA_START, data_range_in_hours=192
+    ).split()
     start = DATA_START + timedelta(hours=70)
     end = DATA_START + timedelta(hours=190)
     forecasts, final_model_state = forecasting.make_rolling_forecasts(start, end, specs)
-    expected_values = specs.outcome_var.load_series(expected_frequency=timedelta(hours=1)).loc[start:end][:-1]
+    expected_values = specs.outcome_var.load_series(
+        expected_frequency=timedelta(hours=1)
+    ).loc[start:end][:-1]
     for forecast, expected_value in zip(forecasts, expected_values):
         assert abs(forecast - expected_value) < TOLERANCE
-    refitting_logs = [log for log in caplog.records if "Fitting new model" in log.message]
+    refitting_logs = [
+        log for log in caplog.records if "Fitting new model" in log.message
+    ]
     remodel_frequency_in_hours = int(specs.remodel_frequency.total_seconds() / 3600)
     expected_log_times = [remodel_frequency_in_hours]
     while max(expected_log_times) < 190:
         expected_log_times.append(max(expected_log_times) + remodel_frequency_in_hours)
     assert len(refitting_logs) == len([elt for elt in expected_log_times if elt >= 70])
     assert model is not final_model_state.model
-
-
-# TODO: add a regressor that is a forecast

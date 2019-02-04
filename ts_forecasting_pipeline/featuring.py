@@ -46,14 +46,6 @@ def construct_features(
         )
     df[specs.outcome_var.name] = outcome_series
 
-    datetime_indices = get_time_steps(time_range, specs)
-
-    # perform the custom transformation, if needed, and store the transformation parameters to be able to back-transform
-    if specs.transformation is not None:
-        df[specs.outcome_var.name] = specs.transformation.transform(
-            df[specs.outcome_var.name]
-        )
-
     # load raw data series for the regressors
     for reg_spec in specs.regressors:
         df[reg_spec.name] = reg_spec.load_series(expected_frequency=specs.frequency)
@@ -69,15 +61,6 @@ def construct_features(
                 )
             )
 
-    # perform the custom transformation, if needed
-    if specs.regressor_transformation is not None:
-        for reg_spec in specs.regressors:
-            if reg_spec.name in specs.regressor_transformation:
-                if specs.regressor_transformation[reg_spec.name] is not None:
-                    df[reg_spec.name] = specs.regressor_transformation[
-                        reg_spec.name
-                    ].transform(df[reg_spec.name])
-
     # add lags on the outcome var
     df = add_lags(df, specs.outcome_var.name, specs.lags)
     outcome_lags = [
@@ -89,6 +72,7 @@ def construct_features(
     ]
 
     # now select only relevant columns and relevant datetime indices
+    datetime_indices = get_time_steps(time_range, specs)
     relevant_columns = (
         [specs.outcome_var.name] + outcome_lags + [r.name for r in specs.regressors]
     )

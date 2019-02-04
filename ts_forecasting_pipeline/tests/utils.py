@@ -1,12 +1,22 @@
+from typing import Optional
 from datetime import datetime, timedelta
+import logging
 
 import pandas as pd
+import numpy as np
 from statsmodels.api import OLS
 
-from ts_forecasting_pipeline import speccing, modelling
+from ts_forecasting_pipeline import speccing, modelling, transforming
 
 
-def create_dummy_model(data_start: datetime, data_range_in_hours: int) -> modelling.ModelState:
+logger = logging.getLogger(__name__)
+
+
+def create_dummy_model_state(
+    data_start: datetime,
+    data_range_in_hours: int,
+    outcome_transformation: Optional[transforming.Transformation] = None,
+) -> modelling.ModelState:
     """
     Create a dummy model. data increases linearly, regressor is constant (useless).
     Use two different ways to define Series specs to test them.
@@ -22,17 +32,35 @@ def create_dummy_model(data_start: datetime, data_range_in_hours: int) -> modell
     outcome_series = pd.Series(index=dt_range, data=outcome_values)
     regressor_series = pd.Series(index=dt_range, data=regressor_values)
     specs = modelling.ModelSpecs(
-        outcome_var=speccing.ObjectSeriesSpecs(outcome_series, "my_outcome"),
+        outcome_var=speccing.ObjectSeriesSpecs(outcome_series, "my_outcome", transformation = outcome_transformation),
         model=OLS,
         lags=[1, 2],
         frequency=timedelta(hours=1),
         horizon=timedelta(minutes=120),
         remodel_frequency=timedelta(hours=48),
         regressors=[regressor_series],
-        start_of_training=data_start + timedelta(hours=2),  # leaving room for NaN in lags
+        start_of_training=data_start
+        + timedelta(hours=2),  # leaving room for NaN in lags
         end_of_testing=data_start + timedelta(hours=int(data_range_in_hours / 3)),
     )
     return modelling.ModelState(
         modelling.create_fitted_model(specs, version="0.1", save=False), specs
     )
 
+
+class MyAdditionTransformation(transforming.Transformation):
+    def transform(self, x: np.array):
+        logger.debug("Adding %s to %s ..." % (self.params.addition, x))
+        return x + self.params.addition
+
+    def back_transform(self, y: np.array):
+        logger.debug("Subtracting %s from %s ..." % (self.params.addition, y))
+        return y - self.params.addition
+
+
+class MyMultiplicationTransformation(transforming.Transformation):
+    def transform(self, x: np.array):
+        return x * self.params.factor
+
+    def back_transform(self, y: np.array):
+        return y / self.params.factor

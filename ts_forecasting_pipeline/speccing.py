@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple, Type, Union
+from typing import List, Optional, Tuple, Type, Union
 from datetime import datetime, timedelta, tzinfo
 from pprint import pformat
 import json
@@ -10,7 +10,6 @@ import pytz
 import dateutil.parser
 import numpy as np
 import pandas as pd
-from statsmodels.base.transform import BoxCox
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Query
 from sqlalchemy.dialects import postgresql
@@ -22,7 +21,11 @@ from ts_forecasting_pipeline.utils.time_utils import (
     timedelta_fits_into,
 )
 from ts_forecasting_pipeline.exceptions import IncompatibleModelSpecs
+from ts_forecasting_pipeline.transforming import Transformation
 
+"""
+Specs for the context of your model and how to treat your model data.
+"""
 
 DEFAULT_RATIO_TRAINING_TESTING_DATA = 2 / 3
 DEFAULT_REMODELING_FREQUENCY = timedelta(days=1)
@@ -52,10 +55,13 @@ class SeriesSpecs(object):
     column: Optional[str]
     # timezone of the data - useful when de-serializing (e.g. pandas serialises to UTC)
     original_tz: tzinfo
+    # Custom transformation to perform on the outcome data. Called after relevant SeriesSpecs were resolved.
+    transformation: Optional[Transformation]
 
-    def __init__(self, name: str, original_tz: tzinfo = None):
+    def __init__(self, name: str, original_tz: Optional[tzinfo] = None, transformation: Optional[Transformation] = None):
         self.name = name
         self.original_tz = original_tz
+        self.transformation = transformation
         self.__series_type__ = self.__class__.__name__
 
     def as_dict(self):
@@ -68,9 +74,10 @@ class SeriesSpecs(object):
     def load_series(
         self, expected_frequency: timedelta, resample_config: dict = None
     ) -> pd.Series:
-        """Load the series data.
+        """Load the series data, check compatibility of series data with model specs and transform, if needed.
+
            The actual implementation how to load is deferred to _load_series. Overwrite that for new subclasses.
-           The expected frequency is used to check compatibility of series data with model specs.
+
            This function resamples data if the frequency is not compatible.
            It is possible to customise resampling (without that, we aggregate means after default resampling.
            Pass in a `resampling_config` dict with an aggregation method name and kw params to pass into `resample`.
@@ -127,6 +134,9 @@ class SeriesSpecs(object):
                             % (resample_config["aggregation"], data_resampler)
                         )
 
+        if self.transformation is not None:
+            data = pd.Series(index=data.index, data=self.transformation.transform(data.values))
+
         return data
 
     def __repr__(self):
@@ -140,8 +150,8 @@ class ObjectSeriesSpecs(SeriesSpecs):
 
     data: pd.Series
 
-    def __init__(self, data: pd.Series, name: str, original_tz: tzinfo = None):
-        super().__init__(name, original_tz)
+    def __init__(self, data: pd.Series, name: str, original_tz: Optional[tzinfo] = None, transformation: Optional[Transformation] = None):
+        super().__init__(name, original_tz, transformation)
         if not isinstance(data.index, pd.DatetimeIndex):
             raise IncompatibleModelSpecs(
                 "Please provide a DatetimeIndex. Only found %s."
@@ -168,13 +178,13 @@ class DFFileSeriesSpecs(SeriesSpecs):
     column: str
 
     def __init__(
-        self, file_path: str, name: str, column: str = None, original_tz: tzinfo = None
+        self, file_path: str, name: str, column: str = None, original_tz: Optional[tzinfo] = None, transformation: Transformation = None
     ):
-        super().__init__(name, original_tz)
+        super().__init__(name, original_tz, transformation)
         self.file_path = file_path
         self.column = column
 
-    def _load_series(self, expected_frequency: timedelta = None) -> pd.Series:
+    def _load_series(self) -> pd.Series:
         df: pd.DataFrame = pd.read_pickle(self.file_path)
 
         return df[self.column]
@@ -196,26 +206,26 @@ class DBSeriesSpecs(SeriesSpecs):
         db_engine: Engine,
         query: Query,
         name: str = "value",
-        original_tz: tzinfo = pytz.utc,  # postgres stores naive datetimes
+        original_tz: Optional[tzinfo] = pytz.utc,  # postgres stores naive datetimes
+        transformation: Transformation = None
     ):
-        super().__init__(name, original_tz)
+        super().__init__(name, original_tz, transformation)
         self.db_engine = db_engine
         self.query = query
 
-    def _load_series(self, expected_frequency: timedelta = None) -> pd.Series:
+    def _load_series(self) -> pd.Series:
         logger.info(
             "Reading %s data from database"
             % self.query.column_descriptions[0]["entity"].__tablename__
         )
 
-        # TODO: call the var a frame if it is one
         df = pd.DataFrame(
             self.query.all(),
             columns=[col["name"] for col in self.query.column_descriptions],
         )
         df["datetime"] = pd.to_datetime(df["datetime"], utc=True)
 
-        # Raise error if data is empty or contains nan values
+        # Raise error if data is empty or contains nan values. Here, other than in load_series, we can show the query.
         if df.empty:
             raise ValueError(
                 "No values found in database for the requested %s data. It's no use to continue I'm afraid."
@@ -244,128 +254,7 @@ class DBSeriesSpecs(SeriesSpecs):
         )
         series.set_index("datetime", drop=True, inplace=True)
 
-        if series.index.tzinfo is None:
-            if self.original_tz is not None:
-                series.index = df.index.tz_localize(self.original_tz)
-        else:
-            series.index = series.index.tz_convert(self.original_tz)
-
-        if expected_frequency is not None:
-            series = df.resample(
-                timedelta_to_pandas_freq_str(expected_frequency)
-            ).mean()
-
         return series["value"]
-
-
-class Transformation(object):
-    """Base class for transformations.
-    Initialise with your custom transformation parameters and define custom functions to transform and back-transform.
-    """
-
-    def __init__(self, **kwargs):
-        """Initialise transformation with named parameters.
-        For example:
-            >>> transformation = Transformation(lambda1=0.5, lambda2=1)
-            >>> transformation.params.lambda1
-            0.5
-        """
-        self.params = type("Params", (), {})
-        self._set_params(**kwargs)
-
-    def _set_params(self, **kwargs):
-        """Assign named variables as attributes."""
-        for k, v in kwargs.items():
-            setattr(self.params, k, v)
-
-    def transform(self, x: np.array) -> Tuple[np.array, dict]:
-        """Return transformed data and set new transformation parameters if applicable."""
-        params = {}
-        y = x
-        self._set_params(**params)
-        return y, params
-
-    def back_transform(self, x: np.array) -> np.array:
-        """Return back-transformed data."""
-        y = x
-        return y
-
-
-# TODO: move these somewhere, maybe a func store?
-class BoxCoxTransformation(Transformation):
-    """Box-Cox transformation.
-
-     For positive-only or negative-only data, no parameters are needed.
-     For non-negative or non-positive data with zero values, set lambda2 to a positive number (e.g. 1).
-
-                            {   ( (x' + lambda2) ^ lambda1 − 1) / lambda1        if lambda1 != 0
-     y(lambda1, lambda2) = {
-                            {   log(x' + lambda2)                                if lambda1 == 0
-
-    where:            x' = x * lambda3
-    """
-
-    def __init__(self, lambda2: float = 0.1):
-        super().__init__(lambda2=lambda2)
-
-    def transform(
-        self, x: Union[np.array, pd.DataFrame, pd.Series]
-    ) -> Tuple[np.array, dict]:
-        params = {}
-        if isinstance(x, (pd.DataFrame, pd.Series)):
-            x = np.array(x.values, dtype=np.float64)
-
-        if (x[~np.isnan(x)] + self.params.lambda2 > 0).all():
-            y, params["lambda1"] = BoxCox.transform_boxcox(
-                BoxCox(), x + self.params.lambda2
-            )
-            params["lambda3"] = 1
-        elif (x[~np.isnan(x)] - self.params.lambda2 < 0).all():
-            y, params["lambda1"] = BoxCox.transform_boxcox(
-                BoxCox(), -x + self.params.lambda2
-            )
-            params["lambda3"] = -1
-        else:
-            raise ValueError(
-                "Box-Cox transformation not suitable for x with both positive and negative values."
-            )
-        self._set_params(**params)
-        return y
-
-    def back_transform(self, x: np.array) -> np.array:
-        try:
-            y = (
-                BoxCox.untransform_boxcox(BoxCox(), x, lmbda=self.params.lambda1)
-                - self.params.lambda2
-            ) / self.params.lambda3
-        except Warning as w:
-            if (
-                w.__str__() == "invalid value encountered in power"
-                and (x < 0).all()
-                and self.params.lambda1 < 1
-            ):
-
-                # Resolve a numpy problem for raising a number close to 0 to a large number, i.e. -0.12^6.25
-                y = (np.zeros(*x.shape) - self.params.lambda2) / self.params.lambda3
-            else:
-                logger.warn(
-                    "Back-transform failed for y(x, lambda1, lambda2, lambda3) with:\n"
-                    "x = %s\n"
-                    "lambda1 = %s\n"
-                    "lambda2 = %s\n"
-                    "lambda3 = %s\n"
-                    "warning = %s\n"
-                    "Returning 0 value instead."
-                    % (
-                        x,
-                        self.params.lambda1,
-                        self.params.lambda2,
-                        self.params.lambda3,
-                        w,
-                    )
-                )
-                y = (np.zeros(*x.shape) - self.params.lambda2) / self.params.lambda3
-        return y
 
 
 class ModelSpecs(object):
@@ -389,10 +278,6 @@ class ModelSpecs(object):
     creation_time: datetime
     model_filename: str
     remodel_frequency: timedelta
-    # Custom transformation to perform on the outcome data. Called after relevant SeriesSpecs were resolved.
-    transformation: Transformation
-    # Custom transformation to perform on each regressor data. Called after relevant SeriesSpecs were resolved.
-    regressor_transformation: Dict[str, Transformation]
 
     def __init__(
         self,
@@ -410,8 +295,6 @@ class ModelSpecs(object):
         remodel_frequency: Union[str, timedelta] = DEFAULT_REMODELING_FREQUENCY,
         model_filename: str = None,
         creation_time: Union[str, datetime] = None,
-        transformation: Transformation = None,
-        regressor_transformation: Dict[str, Transformation] = None,
     ):
         """Create a ModelSpecs instance. Accepts all parameters as string (besides transform - TODO) for
          deserialization support (JSON strings for all parameters which are not natively JSON-parseable,)"""
@@ -439,7 +322,7 @@ class ModelSpecs(object):
         else:
             self.end_of_testing = end_of_testing
         self.ratio_training_testing_data = ratio_training_testing_data
-        # check if training+testing period is compatible with frequency
+        # check if training + testing period is compatible with frequency
         if not timedelta_fits_into(
             self.frequency, self.end_of_testing - self.start_of_training
         ):
@@ -461,8 +344,6 @@ class ModelSpecs(object):
             )
         else:
             self.remodel_frequency = remodel_frequency
-        self.transformation = transformation
-        self.regressor_transformation = regressor_transformation
 
     def as_dict(self):
         return vars(self)

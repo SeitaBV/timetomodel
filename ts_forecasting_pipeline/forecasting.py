@@ -32,8 +32,8 @@ def make_forecast_for(
         y_hat = y_hat.iloc[0]
 
     # Apply back-transformation if the output data was transformed
-    if specs.transformation is not None:
-        y_hat = specs.transformation.back_transform(y_hat)
+    if specs.outcome_var.transformation is not None:
+        y_hat = specs.outcome_var.transformation.back_transform(y_hat)
 
     return y_hat
 
