@@ -34,7 +34,7 @@ setup(
     long_description="""\
     Sane handling of time series data for forecast modelling - with production usage in mind.
     While modelling time series data with data science libraries like Pandas, statsmodels, sklearn etc.,
-    dealing with time series data is cumbersome - timetomdel takes some of that over. Loading data, making
+    dealing with time series data is cumbersome - timetomodel takes some of that over. Loading data, making
     train/test data, feeding data into rolling forecasts...
     Also, the context and assumptions under which a model was made and used should not be in notebooks, they should
     have a readable and reproducible spec.

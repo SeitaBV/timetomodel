@@ -8,7 +8,6 @@ from statsmodels.base.transform import BoxCox
 """
 Transforming data by configurable functionality.
 For instance, after loading, or before and after forecasting.
-These functions work on numpy arrays.
 """
 
 logger = logging.getLogger(__name__)
