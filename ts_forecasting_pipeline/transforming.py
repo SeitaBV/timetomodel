@@ -18,7 +18,10 @@ logger = logging.getLogger(__name__)
 class Transformation(object):
     """Base class for one-way transformations."""
 
-    def transform(self, x: Union[pd.Series, pd.DataFrame]) -> Union[pd.Series, pd.DataFrame]:
+    def transform_series(self, x: pd.Series) -> pd.Series:
+        return x
+
+    def transform_dataframe(self, x: pd.DataFrame) -> pd.DataFrame:
         return x
 
 
@@ -53,8 +56,8 @@ class ReversibleTransformation(ParameterisedTransformation):
     The (optional) back-transformation is applied to forecasted data.
     """
 
-    def back_transform(self, x):
-        """Return back-transformed data."""
+    def back_transform_value(self, x):
+        """Return back-transformed values, based on parameters."""
         return x
 
 
@@ -74,8 +77,10 @@ class BoxCoxTransformation(ReversibleTransformation):
     def __init__(self, lambda2: float = 0.1):
         super().__init__(lambda2=lambda2)
 
-    def transform(self, x: np.array) -> np.array:
+    def transform_series(self, x: pd.Series) -> pd.Series:
         params = {}
+        orig_index = x.index
+        x = x.values
         if (x[~np.isnan(x)] + self.params.lambda2 > 0).all():
             y, params["lambda1"] = BoxCox.transform_boxcox(
                 BoxCox(), x + self.params.lambda2
@@ -91,9 +96,9 @@ class BoxCoxTransformation(ReversibleTransformation):
                 "Box-Cox transformation not suitable for x with both positive and negative values."
             )
         self._set_params(**params)
-        return y
+        return pd.Series(index=orig_index, data=y)
 
-    def back_transform(self, x: pd.Series) -> pd.Series:
+    def back_transform_value(self, x):
         try:
             y = (
                 BoxCox.untransform_boxcox(BoxCox(), x, lmbda=self.params.lambda1)

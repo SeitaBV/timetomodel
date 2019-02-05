@@ -98,7 +98,7 @@ def test_create_and_load_model():
 def test_unsupported_serialisation_of_transformations():
     now = get_most_recent_quarter()
     model_state = create_dummy_model(now=now, save=False)
-    model_state.specs.outcome_var.transformation = lambda df: pd.DataFrame()
+    model_state.specs.outcome_var.feature_transformation = lambda df: pd.DataFrame()
     with pytest.raises(Exception) as e_info:
         modelling.save_model(model_state, "0.1")
     print(e_info)

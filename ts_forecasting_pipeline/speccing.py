@@ -55,8 +55,8 @@ class SeriesSpecs(object):
     column: Optional[str]
     # timezone of the data - useful when de-serializing (e.g. pandas serialises to UTC)
     original_tz: tzinfo
-    # Custom transformation to perform on the outcome data. Called after relevant SeriesSpecs were resolved.
-    transformation: Optional[ReversibleTransformation]
+    # Custom transformation on feature data to be made before forecasting, back-transformed right after.
+    feature_transformation: Optional[ReversibleTransformation]
     #
     # post_load
     # Custom resampling parameters. All parameters apply to pd.resample, only "aggregation" is the name
@@ -67,12 +67,12 @@ class SeriesSpecs(object):
         self,
         name: str,
         original_tz: Optional[tzinfo] = None,
-        transformation: Optional[ReversibleTransformation] = None,
+        feature_transformation: Optional[ReversibleTransformation] = None,
         resampling_config: Dict[str, Any] = None,
     ):
         self.name = name
         self.original_tz = original_tz
-        self.transformation = transformation
+        self.feature_transformation = feature_transformation
         self.resampling_config = resampling_config
         self.__series_type__ = self.__class__.__name__
 
@@ -134,10 +134,8 @@ class SeriesSpecs(object):
                     )
                 )
 
-        if self.transformation is not None:
-            data = pd.Series(
-                index=data.index, data=self.transformation.transform(data.values)
-            )
+        if self.feature_transformation is not None:
+            data = self.feature_transformation.transform_series(data)
 
         return data
 
@@ -187,10 +185,10 @@ class ObjectSeriesSpecs(SeriesSpecs):
         data: pd.Series,
         name: str,
         original_tz: Optional[tzinfo] = None,
-        transformation: Optional[ReversibleTransformation] = None,
+        feature_transformation: Optional[ReversibleTransformation] = None,
         resampling_config: Dict[str, Any] = None,
     ):
-        super().__init__(name, original_tz, transformation, resampling_config)
+        super().__init__(name, original_tz, feature_transformation, resampling_config)
         if not isinstance(data.index, pd.DatetimeIndex):
             raise IncompatibleModelSpecs(
                 "Please provide a DatetimeIndex. Only found %s."
@@ -222,10 +220,10 @@ class DFFileSeriesSpecs(SeriesSpecs):
         name: str,
         column: str = None,
         original_tz: Optional[tzinfo] = None,
-        transformation: ReversibleTransformation = None,
+        feature_transformation: ReversibleTransformation = None,
         resampling_config: Dict[str, Any] = None,
     ):
-        super().__init__(name, original_tz, transformation, resampling_config)
+        super().__init__(name, original_tz, feature_transformation, resampling_config)
         self.file_path = file_path
         self.column = column
 
@@ -252,10 +250,10 @@ class DBSeriesSpecs(SeriesSpecs):
         query: Query,
         name: str = "value",
         original_tz: Optional[tzinfo] = pytz.utc,  # postgres stores naive datetimes
-        transformation: ReversibleTransformation = None,
+        feature_transformation: ReversibleTransformation = None,
         resampling_config: Dict[str, Any] = None,
     ):
-        super().__init__(name, original_tz, transformation, resampling_config)
+        super().__init__(name, original_tz, feature_transformation, resampling_config)
         self.db_engine = db_engine
         self.query = query
 

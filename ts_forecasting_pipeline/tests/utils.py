@@ -15,7 +15,9 @@ logger = logging.getLogger(__name__)
 def create_dummy_model_state(
     data_start: datetime,
     data_range_in_hours: int,
-    outcome_transformation: Optional[transforming.ReversibleTransformation] = None,
+    outcome_feature_transformation: Optional[
+        transforming.ReversibleTransformation
+    ] = None,
 ) -> modelling.ModelState:
     """
     Create a dummy model. data increases linearly, regressor is constant (useless).
@@ -32,7 +34,11 @@ def create_dummy_model_state(
     outcome_series = pd.Series(index=dt_range, data=outcome_values)
     regressor_series = pd.Series(index=dt_range, data=regressor_values)
     specs = modelling.ModelSpecs(
-        outcome_var=speccing.ObjectSeriesSpecs(outcome_series, "my_outcome", transformation=outcome_transformation),
+        outcome_var=speccing.ObjectSeriesSpecs(
+            outcome_series,
+            name="my_outcome",
+            feature_transformation=outcome_feature_transformation,
+        ),
         model=OLS,
         lags=[1, 2],
         frequency=timedelta(hours=1),
@@ -49,7 +55,7 @@ def create_dummy_model_state(
 
 
 class MyAdditionTransformation(transforming.ReversibleTransformation):
-    def transform(self, x: np.array):
+    def transform_series(self, x: pd.Series):
         logger.debug("Adding %s to %s ..." % (self.params.addition, x))
         return x + self.params.addition
 
@@ -59,7 +65,7 @@ class MyAdditionTransformation(transforming.ReversibleTransformation):
 
 
 class MyMultiplicationTransformation(transforming.ReversibleTransformation):
-    def transform(self, x: np.array):
+    def transform_series(self, x: pd.Series):
         return x * self.params.factor
 
     def back_transform(self, y: np.array):

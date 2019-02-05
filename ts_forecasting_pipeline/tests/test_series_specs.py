@@ -114,7 +114,7 @@ def test_load_series_with_transformation():
             data=[1, 2, 3],
         ),
         name="mydata",
-        transformation=MyMultiplicationTransformation(factor=11)
+        feature_transformation=MyMultiplicationTransformation(factor=11)
     )
     assert (
         s.load_series(expected_frequency=timedelta(minutes=15)).loc[

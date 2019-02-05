@@ -37,14 +37,17 @@ def test_make_one_forecast_with_transformation():
     model, specs = test_utils.create_dummy_model_state(
         DATA_START,
         data_range_in_hours=24,
-        outcome_transformation=test_utils.MyAdditionTransformation(addition=7),
+        outcome_feature_transformation=test_utils.MyAdditionTransformation(addition=7),
     ).split()
     dt = datetime(2020, 1, 22, 22, tzinfo=pytz.timezone("Europe/Amsterdam"))
+    feature_data = specs.outcome_var.feature_transformation.transform_series(
+        pd.Series([891, 892])
+    )
     features = pd.DataFrame(
         index=pd.DatetimeIndex(start=dt, end=dt, freq="H"),
         data={
-            "my_outcome_l1": specs.outcome_var.transformation.transform(892),
-            "my_outcome_l2": specs.outcome_var.transformation.transform(891),
+            "my_outcome_l1": feature_data[1],
+            "my_outcome_l2": feature_data[0],
             "Regressor1": 5,
         },
     )
