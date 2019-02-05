@@ -1,6 +1,7 @@
 from typing import List, Optional, Tuple, Type, Union, Dict, Any
 from datetime import datetime, timedelta, tzinfo
 from pprint import pformat
+import os
 import json
 import warnings
 import logging
@@ -21,7 +22,10 @@ from ts_forecasting_pipeline.utils.time_utils import (
     timedelta_fits_into,
 )
 from ts_forecasting_pipeline.exceptions import IncompatibleModelSpecs
-from ts_forecasting_pipeline.transforming import ReversibleTransformation
+from ts_forecasting_pipeline.transforming import (
+    Transformation,
+    ReversibleTransformation,
+)
 
 """
 Specs for the context of your model and how to treat your model data.
@@ -57,8 +61,8 @@ class SeriesSpecs(object):
     original_tz: tzinfo
     # Custom transformation on feature data to be made before forecasting, back-transformed right after.
     feature_transformation: Optional[ReversibleTransformation]
-    #
-    # post_load
+    # Custom processing on data right after loading, e.g. for cleanup
+    post_load_processing: Optional[Transformation]
     # Custom resampling parameters. All parameters apply to pd.resample, only "aggregation" is the name
     # of the aggregation function to be called of the resulting resampler
     resampling_config: Dict[str, Any]
@@ -68,11 +72,13 @@ class SeriesSpecs(object):
         name: str,
         original_tz: Optional[tzinfo] = None,
         feature_transformation: Optional[ReversibleTransformation] = None,
+        post_load_processing: Optional[Transformation] = None,
         resampling_config: Dict[str, Any] = None,
     ):
         self.name = name
         self.original_tz = original_tz
         self.feature_transformation = feature_transformation
+        self.post_load_processing = post_load_processing
         self.resampling_config = resampling_config
         self.__series_type__ = self.__class__.__name__
 
@@ -80,11 +86,18 @@ class SeriesSpecs(object):
         return vars(self)
 
     def _load_series(self) -> pd.Series:
-        """Subclasses overwrite this function to get the raw data"""
-        return pd.Series()
+        """Subclasses overwrite this function to get the raw data.
+        This method is responsible to call any post_load_processing at the right place."""
+        data = pd.Series()
+        if self.post_load_processing is not None:
+            return self.post_load_processing.transform_series(data)
+        return data
 
-    def load_series(self, expected_frequency: timedelta) -> pd.Series:
-        """Load the series data, check compatibility of series data with model specs and transform, if needed.
+    def load_series(
+        self, expected_frequency: timedelta, transform_features: bool = False
+    ) -> pd.Series:
+        """Load the series data, check compatibility of series data with model specs
+           and perform feature transformation, if needed.
 
            The actual implementation how to load is deferred to _load_series. Overwrite that for new subclasses.
 
@@ -134,7 +147,7 @@ class SeriesSpecs(object):
                     )
                 )
 
-        if self.feature_transformation is not None:
+        if transform_features and self.feature_transformation is not None:
             data = self.feature_transformation.transform_series(data)
 
         return data
@@ -186,9 +199,16 @@ class ObjectSeriesSpecs(SeriesSpecs):
         name: str,
         original_tz: Optional[tzinfo] = None,
         feature_transformation: Optional[ReversibleTransformation] = None,
+        post_load_processing: Optional[Transformation] = None,
         resampling_config: Dict[str, Any] = None,
     ):
-        super().__init__(name, original_tz, feature_transformation, resampling_config)
+        super().__init__(
+            name,
+            original_tz,
+            feature_transformation,
+            post_load_processing,
+            resampling_config,
+        )
         if not isinstance(data.index, pd.DatetimeIndex):
             raise IncompatibleModelSpecs(
                 "Please provide a DatetimeIndex. Only found %s."
@@ -197,12 +217,9 @@ class ObjectSeriesSpecs(SeriesSpecs):
         self.data = data
 
     def _load_series(self) -> pd.Series:
+        if self.post_load_processing is not None:
+            return self.post_load_processing.transform_series(self.data)
         return self.data
-
-
-class CSVFileSeriesSpecs(SeriesSpecs):
-    # TODO: Make this
-    pass
 
 
 class DFFileSeriesSpecs(SeriesSpecs):
@@ -212,25 +229,94 @@ class DFFileSeriesSpecs(SeriesSpecs):
     """
 
     file_path: str
-    column: str
+    time_column: str
+    value_column: str
 
     def __init__(
         self,
         file_path: str,
+        time_column: str,
+        value_column: str,
         name: str,
-        column: str = None,
         original_tz: Optional[tzinfo] = None,
         feature_transformation: ReversibleTransformation = None,
+        post_load_processing: Optional[Transformation] = None,
         resampling_config: Dict[str, Any] = None,
     ):
-        super().__init__(name, original_tz, feature_transformation, resampling_config)
+        super().__init__(
+            name,
+            original_tz,
+            feature_transformation,
+            post_load_processing,
+            resampling_config,
+        )
         self.file_path = file_path
-        self.column = column
+        self.time_column = time_column
+        self.value_column = value_column
 
     def _load_series(self) -> pd.Series:
         df: pd.DataFrame = pd.read_pickle(self.file_path)
+        if self.post_load_processing is not None:
+            df = self.post_load_processing.transform_dataframe(df)
 
-        return df[self.column]
+        df[self.time_column] = pd.to_datetime(df[self.time_column])
+        df.set_index(self.time_column, drop=True, inplace=True)
+
+        return df[self.value_column]
+
+
+class CSVFileSeriesSpecs(SeriesSpecs):
+    """
+    Spec for a CSV file source.
+    This class holds the filename, from which we load the data frame, then read the column.
+    Any special configuration of pd.read_csv can be given in the `read_csv_config` dict.
+    """
+
+    file_path: str
+    time_column: str
+    value_column: str
+    read_csv_config: Dict[str, Any]
+
+    def __init__(
+        self,
+        file_path: str,
+        time_column: str,
+        value_column: str,
+        name: str,
+        read_csv_config: Dict[str, Any] = None,
+        original_tz: Optional[tzinfo] = None,
+        feature_transformation: ReversibleTransformation = None,
+        post_load_processing: Optional[Transformation] = None,
+        resampling_config: Dict[str, Any] = None,
+    ):
+        super().__init__(
+            name,
+            original_tz,
+            feature_transformation,
+            post_load_processing,
+            resampling_config,
+        )
+        self.file_path = file_path
+        self.time_column = time_column
+        self.value_column = value_column
+        self.read_csv_config = read_csv_config
+
+    def _load_series(self) -> pd.Series:
+        if not os.path.exists(self.file_path):
+            raise IncompatibleModelSpecs("Filepath %s does not seem to exist." % self.file_path)
+
+        if self.read_csv_config is None:
+            df: pd.DataFrame = pd.read_csv(self.file_path)
+        else:
+            df: pd.DataFrame = pd.read_csv(self.file_path, **self.read_csv_config)
+
+        if self.post_load_processing is not None:
+            df = self.post_load_processing.transform_dataframe(df)
+
+        df[self.time_column] = pd.to_datetime(df[self.time_column])
+        df.set_index(self.time_column, drop=True, inplace=True)
+
+        return df[self.value_column]
 
 
 class DBSeriesSpecs(SeriesSpecs):
@@ -248,12 +334,19 @@ class DBSeriesSpecs(SeriesSpecs):
         self,
         db_engine: Engine,
         query: Query,
-        name: str = "value",
+        name: str,
         original_tz: Optional[tzinfo] = pytz.utc,  # postgres stores naive datetimes
-        feature_transformation: ReversibleTransformation = None,
+        feature_transformation: Optional[ReversibleTransformation] = None,
+        post_load_processing: Optional[Transformation] = None,
         resampling_config: Dict[str, Any] = None,
     ):
-        super().__init__(name, original_tz, feature_transformation, resampling_config)
+        super().__init__(
+            name,
+            original_tz,
+            feature_transformation,
+            post_load_processing,
+            resampling_config,
+        )
         self.db_engine = db_engine
         self.query = query
 
@@ -267,9 +360,21 @@ class DBSeriesSpecs(SeriesSpecs):
             self.query.all(),
             columns=[col["name"] for col in self.query.column_descriptions],
         )
+
+        self.check_for_nan(df)
+
         df["datetime"] = pd.to_datetime(df["datetime"], utc=True)
 
-        # Raise error if data is empty or contains nan values. Here, other than in load_series, we can show the query.
+        if self.post_load_processing is not None:
+            df = self.post_load_processing.transform_dataframe(df)
+
+        df.set_index("datetime", drop=True, inplace=True)
+
+        return df["value"]
+
+    def check_for_nan(self, df: pd.DataFrame):
+        """ Raise error if data is empty or contains nan values.
+        Here, other than in load_series, we can show the query, which is quite helpful."""
         if df.empty:
             raise ValueError(
                 "No values found in database for the requested %s data. It's no use to continue I'm afraid."
@@ -288,17 +393,6 @@ class DBSeriesSpecs(SeriesSpecs):
                     render_query(self.query.statement, dialect=postgresql.dialect()),
                 )
             )
-
-        # TODO: this is a post-processing function - move to func store maybe
-        # Keep the most recent observation
-        series = (
-            df.sort_values(by=["horizon"], ascending=True)
-            .drop_duplicates(subset=["datetime"], keep="first")
-            .sort_values(by=["datetime"])
-        )
-        series.set_index("datetime", drop=True, inplace=True)
-
-        return series["value"]
 
 
 class ModelSpecs(object):

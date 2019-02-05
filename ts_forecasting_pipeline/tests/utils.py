@@ -54,6 +54,18 @@ def create_dummy_model_state(
     )
 
 
+class MyDFPostProcessing(transforming.Transformation):
+
+    def transform_dataframe(self, df: pd.DataFrame):
+        """Keep the most recent observation, drop duplicates"""
+        return (
+            df
+            .sort_values(by=["horizon"], ascending=True)
+            .drop_duplicates(subset=["datetime"], keep="first")
+            .sort_values(by=["datetime"])
+        )
+
+
 class MyAdditionTransformation(transforming.ReversibleTransformation):
     def transform_series(self, x: pd.Series):
         logger.debug("Adding %s to %s ..." % (self.params.addition, x))
