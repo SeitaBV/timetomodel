@@ -31,9 +31,9 @@ def make_forecast_for(
     if isinstance(y_hat, pd.Series):
         y_hat = y_hat.iloc[0]
 
-    # Apply back-transformation if the output data was transformed
-    if specs.transformation is not None:
-        y_hat = specs.transformation.back_transform(y_hat)
+    # Apply back-transformation, as the output data was transformed before
+    if specs.outcome_var.feature_transformation is not None:
+        y_hat = specs.outcome_var.feature_transformation.back_transform(y_hat)
 
     return y_hat
 

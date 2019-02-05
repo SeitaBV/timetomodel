@@ -1,15 +1,16 @@
-from typing import Dict, List, Optional, Tuple, Type, Union
+from typing import List, Optional, Tuple, Type, Union, Dict, Any
 from datetime import datetime, timedelta, tzinfo
 from pprint import pformat
+import os
 import json
 import warnings
 import logging
+import inspect
 
 import pytz
 import dateutil.parser
 import numpy as np
 import pandas as pd
-from statsmodels.base.transform import BoxCox
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Query
 from sqlalchemy.dialects import postgresql
@@ -21,7 +22,14 @@ from ts_forecasting_pipeline.utils.time_utils import (
     timedelta_fits_into,
 )
 from ts_forecasting_pipeline.exceptions import IncompatibleModelSpecs
+from ts_forecasting_pipeline.transforming import (
+    Transformation,
+    ReversibleTransformation,
+)
 
+"""
+Specs for the context of your model and how to treat your model data.
+"""
 
 DEFAULT_RATIO_TRAINING_TESTING_DATA = 2 / 3
 DEFAULT_REMODELING_FREQUENCY = timedelta(days=1)
@@ -36,7 +44,7 @@ class SeriesSpecs(object):
     """Describes a time series (e.g. a pandas Series).
     In essence, a column in the regression frame, filled with numbers.
 
-    Using this class, the column will be filled with NaN values.
+    Using this base class, the column will be filled with NaN values.
 
     If you have data to be loaded in automatically, you should be using one of the subclasses, which allow to describe
     or pass in an actual data source to be loaded.
@@ -47,24 +55,132 @@ class SeriesSpecs(object):
 
     # The name in the resulting feature frame, and possibly in the saved model specs (named by outcome var)
     name: str
-    # The name in the data source, if source is a pandas DataFrame or database Table - if None, the name will be tried
+    # The name of the data column in the data source. If None, the name will be tried.
     column: Optional[str]
     # timezone of the data - useful when de-serializing (e.g. pandas serialises to UTC)
     original_tz: tzinfo
+    # Custom transformation on feature data to be made before forecasting, back-transformed right after.
+    feature_transformation: Optional[ReversibleTransformation]
+    # Custom processing on data right after loading, e.g. for cleanup
+    post_load_processing: Optional[Transformation]
+    # Custom resampling parameters. All parameters apply to pd.resample, only "aggregation" is the name
+    # of the aggregation function to be called of the resulting resampler
+    resampling_config: Dict[str, Any]
 
-    def __init__(self, name: str, column: str = None, original_tz: tzinfo = None):
+    def __init__(
+        self,
+        name: str,
+        original_tz: Optional[tzinfo] = None,
+        feature_transformation: Optional[ReversibleTransformation] = None,
+        post_load_processing: Optional[Transformation] = None,
+        resampling_config: Dict[str, Any] = None,
+    ):
         self.name = name
-        self.column = column
-        if self.column is None:
-            self.column = name
         self.original_tz = original_tz
+        self.feature_transformation = feature_transformation
+        self.post_load_processing = post_load_processing
+        self.resampling_config = resampling_config
         self.__series_type__ = self.__class__.__name__
 
     def as_dict(self):
         return vars(self)
 
-    def load_series(self, expected_frequency: timedelta = None) -> pd.Series:
-        return pd.Series()
+    def _load_series(self) -> pd.Series:
+        """Subclasses overwrite this function to get the raw data.
+        This method is responsible to call any post_load_processing at the right place."""
+        data = pd.Series()
+        if self.post_load_processing is not None:
+            return self.post_load_processing.transform_series(data)
+        return data
+
+    def load_series(
+        self, expected_frequency: timedelta, transform_features: bool = False
+    ) -> pd.Series:
+        """Load the series data, check compatibility of series data with model specs
+           and perform feature transformation, if needed.
+
+           The actual implementation how to load is deferred to _load_series. Overwrite that for new subclasses.
+
+           This function resamples data if the frequency is not compatible.
+           It is possible to customise resampling (without that, we aggregate means after default resampling.
+           Pass in a `resampling_config` to the class with an aggregation method name and
+           kw params to pass into `resample`. For example:
+
+           `resampling_config={"closed": "left", "aggregation": "sum"}`
+        """
+        data = self._load_series()
+
+        # check if data has a DateTimeIndex
+        if not isinstance(data.index, pd.DatetimeIndex):
+            raise IncompatibleModelSpecs(
+                "Loaded series has no DatetimeIndex, but %s" % type(data.index).__name__
+            )
+
+        # make sure we have a time zone (default to UTC), save original time zone
+        if data.index.tzinfo is None:
+            self.original_tz = pytz.utc
+            data.index = data.index.tz_localize(self.original_tz)
+        else:
+            self.original_tz = data.index.tzinfo
+
+        # Raise error if data is empty or contains nan values
+        if data.empty:
+            raise ValueError(
+                "No values found in requested %s data. It's no use to continue I'm afraid."
+            )
+        if data.isnull().values.any():
+            raise ValueError(
+                "Nan values found in the requested %s data. It's no use to continue I'm afraid."
+            )
+
+        # check if time series frequency is okay, if not then resample, and check again
+        if data.index.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
+            data = self.resample_data(data, expected_frequency)
+
+            if data.index.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
+                raise Exception(
+                    "Loaded data for %s has different frequency (%s) than used in model (%s)."
+                    % (
+                        self.name,
+                        data.index.freqstr,
+                        timedelta_to_pandas_freq_str(expected_frequency),
+                    )
+                )
+
+        if transform_features and self.feature_transformation is not None:
+            data = self.feature_transformation.transform_series(data)
+
+        return data
+
+    def resample_data(self, data, expected_frequency) -> pd.Series:
+        if self.resampling_config is None:
+            data = data.resample(
+                timedelta_to_pandas_freq_str(expected_frequency)
+            ).mean()
+        else:
+            data_resampler = data.resample(
+                timedelta_to_pandas_freq_str(expected_frequency),
+                **{
+                    k: v
+                    for k, v in self.resampling_config.items()
+                    if k != "aggregation"
+                }
+            )
+            if "aggregation" not in self.resampling_config:
+                data = data_resampler.mean()
+            else:
+                for agg_name, agg_method in inspect.getmembers(
+                    data_resampler, inspect.ismethod
+                ):
+                    if self.resampling_config["aggregation"] == agg_name:
+                        data = agg_method()
+                        break
+                else:
+                    raise IncompatibleModelSpecs(
+                        "Cannot find resampling aggregation %s on %s"
+                        % (self.resampling_config["aggregation"], data_resampler)
+                    )
+        return data
 
     def __repr__(self):
         return "%s: <%s>" % (self.__class__.__name__, self.as_dict())
@@ -73,28 +189,36 @@ class SeriesSpecs(object):
 class ObjectSeriesSpecs(SeriesSpecs):
     """
     Spec for a pd.Series object that is being passed in and is stored directly in the specs.
-    The data is not mutatable after creation.
-    Note: The column argument is not used, as the series has only one column.
     """
 
     data: pd.Series
 
     def __init__(
-        self, data: pd.Series, name: str, column: str = None, original_tz: tzinfo = None
+        self,
+        data: pd.Series,
+        name: str,
+        original_tz: Optional[tzinfo] = None,
+        feature_transformation: Optional[ReversibleTransformation] = None,
+        post_load_processing: Optional[Transformation] = None,
+        resampling_config: Dict[str, Any] = None,
     ):
-        super().__init__(name, None, original_tz)
+        super().__init__(
+            name,
+            original_tz,
+            feature_transformation,
+            post_load_processing,
+            resampling_config,
+        )
+        if not isinstance(data.index, pd.DatetimeIndex):
+            raise IncompatibleModelSpecs(
+                "Please provide a DatetimeIndex. Only found %s."
+                % type(data.index).__name__
+            )
         self.data = data
-        self.original_tz = data.index.tzinfo
-        if self.original_tz is None:
-            self.original_tz = pytz.utc
 
-    def load_series(self, expected_frequency: timedelta = None) -> pd.Series:
-
-        if expected_frequency is not None:
-            return self.data.resample(
-                timedelta_to_pandas_freq_str(expected_frequency)
-            ).mean()
-
+    def _load_series(self) -> pd.Series:
+        if self.post_load_processing is not None:
+            return self.post_load_processing.transform_series(self.data)
         return self.data
 
 
@@ -105,29 +229,94 @@ class DFFileSeriesSpecs(SeriesSpecs):
     """
 
     file_path: str
+    time_column: str
+    value_column: str
 
     def __init__(
-        self, file_path: str, name: str, column: str = None, original_tz: tzinfo = None
+        self,
+        file_path: str,
+        time_column: str,
+        value_column: str,
+        name: str,
+        original_tz: Optional[tzinfo] = None,
+        feature_transformation: ReversibleTransformation = None,
+        post_load_processing: Optional[Transformation] = None,
+        resampling_config: Dict[str, Any] = None,
     ):
-        super().__init__(name, column, original_tz)
+        super().__init__(
+            name,
+            original_tz,
+            feature_transformation,
+            post_load_processing,
+            resampling_config,
+        )
         self.file_path = file_path
+        self.time_column = time_column
+        self.value_column = value_column
 
-    def load_series(self, expected_frequency: timedelta = None) -> pd.Series:
+    def _load_series(self) -> pd.Series:
         df: pd.DataFrame = pd.read_pickle(self.file_path)
-        if df.index.tzinfo is None:
-            self.original_tz = pytz.utc
-            df.index = df.index.tz_localize(self.original_tz)
+        if self.post_load_processing is not None:
+            df = self.post_load_processing.transform_dataframe(df)
+
+        df[self.time_column] = pd.to_datetime(df[self.time_column])
+        df.set_index(self.time_column, drop=True, inplace=True)
+
+        return df[self.value_column]
+
+
+class CSVFileSeriesSpecs(SeriesSpecs):
+    """
+    Spec for a CSV file source.
+    This class holds the filename, from which we load the data frame, then read the column.
+    Any special configuration of pd.read_csv can be given in the `read_csv_config` dict.
+    """
+
+    file_path: str
+    time_column: str
+    value_column: str
+    read_csv_config: Dict[str, Any]
+
+    def __init__(
+        self,
+        file_path: str,
+        time_column: str,
+        value_column: str,
+        name: str,
+        read_csv_config: Dict[str, Any] = None,
+        original_tz: Optional[tzinfo] = None,
+        feature_transformation: ReversibleTransformation = None,
+        post_load_processing: Optional[Transformation] = None,
+        resampling_config: Dict[str, Any] = None,
+    ):
+        super().__init__(
+            name,
+            original_tz,
+            feature_transformation,
+            post_load_processing,
+            resampling_config,
+        )
+        self.file_path = file_path
+        self.time_column = time_column
+        self.value_column = value_column
+        self.read_csv_config = read_csv_config
+
+    def _load_series(self) -> pd.Series:
+        if not os.path.exists(self.file_path):
+            raise IncompatibleModelSpecs("Filepath %s does not seem to exist." % self.file_path)
+
+        if self.read_csv_config is None:
+            df: pd.DataFrame = pd.read_csv(self.file_path)
         else:
-            self.original_tz = df.index.tzinfo
+            df: pd.DataFrame = pd.read_csv(self.file_path, **self.read_csv_config)
 
-        if expected_frequency is not None:
-            return (
-                df[self.column]
-                .resample(timedelta_to_pandas_freq_str(expected_frequency))
-                .mean()
-            )
+        if self.post_load_processing is not None:
+            df = self.post_load_processing.transform_dataframe(df)
 
-        return df[self.column]
+        df[self.time_column] = pd.to_datetime(df[self.time_column])
+        df.set_index(self.time_column, drop=True, inplace=True)
+
+        return df[self.value_column]
 
 
 class DBSeriesSpecs(SeriesSpecs):
@@ -135,9 +324,8 @@ class DBSeriesSpecs(SeriesSpecs):
     """Define how to query a database for time series values.
     This works via a SQLAlchemy query.
     This query should return the needed information for the forecasting pipeline:
-    A "datetime" column (which will be set as index) and the values column (named by name or column,
-    see SeriesSpecs.__init__, defaults to "value"). For example:
-    TODO: show an example"""
+    A "datetime" column (which will be set as index of the series) and a "value" column.
+    """
 
     db: Engine
     query: Query
@@ -146,34 +334,48 @@ class DBSeriesSpecs(SeriesSpecs):
         self,
         db_engine: Engine,
         query: Query,
-        name: str = "value",
-        column: str = None,
-        original_tz: tzinfo = pytz.utc,  # postgres stores naive datetimes
+        name: str,
+        original_tz: Optional[tzinfo] = pytz.utc,  # postgres stores naive datetimes
+        feature_transformation: Optional[ReversibleTransformation] = None,
+        post_load_processing: Optional[Transformation] = None,
+        resampling_config: Dict[str, Any] = None,
     ):
-        super().__init__(name, column, original_tz)
+        super().__init__(
+            name,
+            original_tz,
+            feature_transformation,
+            post_load_processing,
+            resampling_config,
+        )
         self.db_engine = db_engine
         self.query = query
 
-    def load_series(self, expected_frequency: timedelta = None) -> pd.Series:
+    def _load_series(self) -> pd.Series:
         logger.info(
             "Reading %s data from database"
             % self.query.column_descriptions[0]["entity"].__tablename__
         )
-        """
-        from sqlalchemy.dialects import postgresql
-        cq = self.query.statement.compile(dialect=postgresql.dialect())
-        logger.debug("Query: %s" % str(cq))
-        logger.debug("Params: %s" % str(cq.params))
-        """
 
-        series_orig = pd.DataFrame(
+        df = pd.DataFrame(
             self.query.all(),
             columns=[col["name"] for col in self.query.column_descriptions],
         )
-        series_orig["datetime"] = pd.to_datetime(series_orig["datetime"], utc=True)
 
-        # Raise error if data is empty or contains nan values
-        if series_orig.empty:
+        self.check_for_nan(df)
+
+        df["datetime"] = pd.to_datetime(df["datetime"], utc=True)
+
+        if self.post_load_processing is not None:
+            df = self.post_load_processing.transform_dataframe(df)
+
+        df.set_index("datetime", drop=True, inplace=True)
+
+        return df["value"]
+
+    def check_for_nan(self, df: pd.DataFrame):
+        """ Raise error if data is empty or contains nan values.
+        Here, other than in load_series, we can show the query, which is quite helpful."""
+        if df.empty:
             raise ValueError(
                 "No values found in database for the requested %s data. It's no use to continue I'm afraid."
                 " Here's a print-out of the database query:\n\n%s\n\n"
@@ -182,7 +384,7 @@ class DBSeriesSpecs(SeriesSpecs):
                     render_query(self.query.statement, dialect=postgresql.dialect()),
                 )
             )
-        if series_orig.isnull().values.any():
+        if df.isnull().values.any():
             raise ValueError(
                 "Nan values found in database for the requested %s data. It's no use to continue I'm afraid."
                 " Here's a print-out of the database query:\n\n%s\n\n"
@@ -191,136 +393,6 @@ class DBSeriesSpecs(SeriesSpecs):
                     render_query(self.query.statement, dialect=postgresql.dialect()),
                 )
             )
-
-        # Keep the most recent observation
-        series = (
-            series_orig.sort_values(by=["horizon"], ascending=True)
-            .drop_duplicates(subset=["datetime"], keep="first")
-            .sort_values(by=["datetime"])
-        )
-        series.set_index("datetime", drop=True, inplace=True)
-
-        if series.index.tzinfo is None:
-            if self.original_tz is not None:
-                series.index = series_orig.index.tz_localize(self.original_tz)
-        else:
-            series.index = series.index.tz_convert(self.original_tz)
-
-        if expected_frequency is not None:
-            series = series_orig.resample(
-                timedelta_to_pandas_freq_str(expected_frequency)
-            ).mean()
-
-        return series["value"]
-
-
-class Transformation(object):
-    """Base class for transformations.
-    Initialise with your custom transformation parameters and define custom functions to transform and back-transform.
-    """
-
-    def __init__(self, **kwargs):
-        """Initialise transformation with named parameters.
-        For example:
-            >>> transformation = Transformation(lambda1=0.5, lambda2=1)
-            >>> transformation.params.lambda1
-            0.5
-        """
-        self.params = type("Params", (), {})
-        self._set_params(**kwargs)
-
-    def _set_params(self, **kwargs):
-        """Assign named variables as attributes."""
-        for k, v in kwargs.items():
-            setattr(self.params, k, v)
-
-    def transform(self, x: np.array) -> Tuple[np.array, dict]:
-        """Return transformed data and set new transformation parameters if applicable."""
-        params = {}
-        y = x
-        self._set_params(**params)
-        return y, params
-
-    def back_transform(self, x: np.array) -> np.array:
-        """Return back-transformed data."""
-        y = x
-        return y
-
-
-class BoxCoxTransformation(Transformation):
-    """Box-Cox transformation.
-
-     For positive-only or negative-only data, no parameters are needed.
-     For non-negative or non-positive data with zero values, set lambda2 to a positive number (e.g. 1).
-
-                            {   ( (x' + lambda2) ^ lambda1 − 1) / lambda1        if lambda1 != 0
-     y(lambda1, lambda2) = {
-                            {   log(x' + lambda2)                                if lambda1 == 0
-
-    where:            x' = x * lambda3
-    """
-
-    def __init__(self, lambda2: float = 0.1):
-        super().__init__(lambda2=lambda2)
-
-    def transform(
-        self, x: Union[np.array, pd.DataFrame, pd.Series]
-    ) -> Tuple[np.array, dict]:
-        params = {}
-        if isinstance(x, (pd.DataFrame, pd.Series)):
-            x = np.array(x.values, dtype=np.float64)
-
-        if (x[~np.isnan(x)] + self.params.lambda2 > 0).all():
-            y, params["lambda1"] = BoxCox.transform_boxcox(
-                BoxCox(), x + self.params.lambda2
-            )
-            params["lambda3"] = 1
-        elif (x[~np.isnan(x)] - self.params.lambda2 < 0).all():
-            y, params["lambda1"] = BoxCox.transform_boxcox(
-                BoxCox(), -x + self.params.lambda2
-            )
-            params["lambda3"] = -1
-        else:
-            raise ValueError(
-                "Box-Cox transformation not suitable for x with both positive and negative values."
-            )
-        self._set_params(**params)
-        return y
-
-    def back_transform(self, x: np.array) -> np.array:
-        try:
-            y = (
-                BoxCox.untransform_boxcox(BoxCox(), x, lmbda=self.params.lambda1)
-                - self.params.lambda2
-            ) / self.params.lambda3
-        except Warning as w:
-            if (
-                w.__str__() == "invalid value encountered in power"
-                and (x < 0).all()
-                and self.params.lambda1 < 1
-            ):
-
-                # Resolve a numpy problem for raising a number close to 0 to a large number, i.e. -0.12^6.25
-                y = (np.zeros(*x.shape) - self.params.lambda2) / self.params.lambda3
-            else:
-                logger.warn(
-                    "Back-transform failed for y(x, lambda1, lambda2, lambda3) with:\n"
-                    "x = %s\n"
-                    "lambda1 = %s\n"
-                    "lambda2 = %s\n"
-                    "lambda3 = %s\n"
-                    "warning = %s\n"
-                    "Returning 0 value instead."
-                    % (
-                        x,
-                        self.params.lambda1,
-                        self.params.lambda2,
-                        self.params.lambda3,
-                        w,
-                    )
-                )
-                y = (np.zeros(*x.shape) - self.params.lambda2) / self.params.lambda3
-        return y
 
 
 class ModelSpecs(object):
@@ -344,10 +416,6 @@ class ModelSpecs(object):
     creation_time: datetime
     model_filename: str
     remodel_frequency: timedelta
-    # Custom transformation to perform on the outcome data. Called after relevant SeriesSpecs were resolved.
-    transformation: Transformation
-    # Custom transformation to perform on each regressor data. Called after relevant SeriesSpecs were resolved.
-    regressor_transformation: Dict[str, Transformation]
 
     def __init__(
         self,
@@ -365,8 +433,6 @@ class ModelSpecs(object):
         remodel_frequency: Union[str, timedelta] = DEFAULT_REMODELING_FREQUENCY,
         model_filename: str = None,
         creation_time: Union[str, datetime] = None,
-        transformation: Transformation = None,
-        regressor_transformation: Dict[str, Transformation] = None,
     ):
         """Create a ModelSpecs instance. Accepts all parameters as string (besides transform - TODO) for
          deserialization support (JSON strings for all parameters which are not natively JSON-parseable,)"""
@@ -394,7 +460,7 @@ class ModelSpecs(object):
         else:
             self.end_of_testing = end_of_testing
         self.ratio_training_testing_data = ratio_training_testing_data
-        # check if training+testing period is compatible with frequency
+        # check if training + testing period is compatible with frequency
         if not timedelta_fits_into(
             self.frequency, self.end_of_testing - self.start_of_training
         ):
@@ -416,8 +482,6 @@ class ModelSpecs(object):
             )
         else:
             self.remodel_frequency = remodel_frequency
-        self.transformation = transformation
-        self.regressor_transformation = regressor_transformation
 
     def as_dict(self):
         return vars(self)

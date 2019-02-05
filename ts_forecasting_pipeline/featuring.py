@@ -31,52 +31,15 @@ def construct_features(
     determine the time steps.
     """
     df = pd.DataFrame()
-    # load raw data series for the outcome data
-    outcome_series = specs.outcome_var.load_series(expected_frequency=specs.frequency)
 
-    # check if data is usable TODO: this can become its own function
-    if outcome_series.index.freqstr != timedelta_to_pandas_freq_str(specs.frequency):
-        raise Exception(
-            "Loaded data for %s has different frequency (%s) than used in model (%s)."
-            % (
-                specs.outcome_var.name,
-                outcome_series.index.freqstr,
-                timedelta_to_pandas_freq_str(specs.frequency),
-            )
-        )
-    df[specs.outcome_var.name] = outcome_series
-
-    datetime_indices = get_time_steps(time_range, specs)
-
-    # perform the custom transformation, if needed, and store the transformation parameters to be able to back-transform
-    if specs.transformation is not None:
-        df[specs.outcome_var.name] = specs.transformation.transform(
-            df[specs.outcome_var.name]
-        )
-
-    # load raw data series for the regressors
+    # load raw data series for the outcome data and regressors
+    df[specs.outcome_var.name] = specs.outcome_var.load_series(
+        expected_frequency=specs.frequency, transform_features=True
+    )
     for reg_spec in specs.regressors:
-        df[reg_spec.name] = reg_spec.load_series(expected_frequency=specs.frequency)
-        if outcome_series.index.freqstr != timedelta_to_pandas_freq_str(
-            specs.frequency
-        ):
-            raise Exception(
-                "Loaded data for %s has different frequency (%s) than used in model (%s)."
-                % (
-                    reg_spec.name,
-                    outcome_series.index.freqstr,
-                    timedelta_to_pandas_freq_str(specs.frequency),
-                )
-            )
-
-    # perform the custom transformation, if needed
-    if specs.regressor_transformation is not None:
-        for reg_spec in specs.regressors:
-            if reg_spec.name in specs.regressor_transformation:
-                if specs.regressor_transformation[reg_spec.name] is not None:
-                    df[reg_spec.name] = specs.regressor_transformation[
-                        reg_spec.name
-                    ].transform(df[reg_spec.name])
+        df[reg_spec.name] = reg_spec.load_series(
+            expected_frequency=specs.frequency, transform_features=True
+        )
 
     # add lags on the outcome var
     df = add_lags(df, specs.outcome_var.name, specs.lags)
@@ -89,6 +52,7 @@ def construct_features(
     ]
 
     # now select only relevant columns and relevant datetime indices
+    datetime_indices = get_time_steps(time_range, specs)
     relevant_columns = (
         [specs.outcome_var.name] + outcome_lags + [r.name for r in specs.regressors]
     )

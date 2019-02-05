@@ -25,7 +25,10 @@ def save_model(model_state: ModelState, version: str):
     Best use in single-user mode).
     """
     model, specs = model_state.model, model_state.specs
-    if specs.transformation is not None:
+    if any(
+        [specs.outcome_var.feature_transformation]
+        + [rs.feature_transformation for rs in specs.regressors]
+    ):
         raise Exception(
             "Cannot serialise this ModelSpecs object. Transformation functions are not yet supported."
         )
