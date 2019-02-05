@@ -31,35 +31,11 @@ def construct_features(
     determine the time steps.
     """
     df = pd.DataFrame()
-    # load raw data series for the outcome data
-    outcome_series = specs.outcome_var.load_series(expected_frequency=specs.frequency)
 
-    # check if data is usable TODO: this can become its own function
-    if outcome_series.index.freqstr != timedelta_to_pandas_freq_str(specs.frequency):
-        raise Exception(
-            "Loaded data for %s has different frequency (%s) than used in model (%s)."
-            % (
-                specs.outcome_var.name,
-                outcome_series.index.freqstr,
-                timedelta_to_pandas_freq_str(specs.frequency),
-            )
-        )
-    df[specs.outcome_var.name] = outcome_series
-
-    # load raw data series for the regressors
+    # load raw data series for the outcome data and regressors
+    df[specs.outcome_var.name] = specs.outcome_var.load_series(expected_frequency=specs.frequency)
     for reg_spec in specs.regressors:
         df[reg_spec.name] = reg_spec.load_series(expected_frequency=specs.frequency)
-        if outcome_series.index.freqstr != timedelta_to_pandas_freq_str(
-            specs.frequency
-        ):
-            raise Exception(
-                "Loaded data for %s has different frequency (%s) than used in model (%s)."
-                % (
-                    reg_spec.name,
-                    outcome_series.index.freqstr,
-                    timedelta_to_pandas_freq_str(specs.frequency),
-                )
-            )
 
     # add lags on the outcome var
     df = add_lags(df, specs.outcome_var.name, specs.lags)

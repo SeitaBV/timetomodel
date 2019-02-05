@@ -1,6 +1,7 @@
-from typing import Tuple
+from typing import Union
 import logging
 
+import pandas as pd
 import numpy as np
 
 from statsmodels.base.transform import BoxCox
@@ -15,13 +16,16 @@ logger = logging.getLogger(__name__)
 
 
 class Transformation(object):
-    """Base class for transformations of time series data.
-    Initialise with your custom transformation parameters and define custom functions to transform and back-transform.
-    These functions can also re-set your original parameters.
-    You can optionally also provide a back-transformation, which is applied to forecasted data.
+    """Base class for one-way transformations."""
 
-    An example would be the BoxCox Transformation, for which we provide an implementation below.
-    """
+    def transform(self, x: Union[pd.Series, pd.DataFrame]) -> Union[pd.Series, pd.DataFrame]:
+        return x
+
+
+class ParameterisedTransformation(Transformation):
+    """Base class for transformations which get parameterised when initialised,
+    so calls to transform can make use of those.
+    transform() could even change parameters on the fly, if needed, to affect later calls."""
 
     def __init__(self, **kwargs):
         """Initialise transformation with named parameters.
@@ -38,21 +42,23 @@ class Transformation(object):
         for k, v in kwargs.items():
             setattr(self.params, k, v)
 
-    def transform(self, x: np.array) -> Tuple[np.array, dict]:
-        """Return transformed data and set new transformation parameters if applicable."""
-        params = {}
-        y = x
-        self._set_params(**params)
-        return y, params
 
-    def back_transform(self, x: np.array) -> np.array:
+class ReversibleTransformation(ParameterisedTransformation):
+    """Base class for transformations of time series data with a state, so that back transformations are possible
+    which depend on the actual data being transformed.
+    An example would be the BoxCox Transformation, for which we provide an implementation below.
+
+    Initialise with your custom transformation parameters and define custom functions to transform and back-transform.
+    The transform function can re-set your original parameters, in case it wants to adapt to the data.
+    The (optional) back-transformation is applied to forecasted data.
+    """
+
+    def back_transform(self, x):
         """Return back-transformed data."""
-        y = x
-        return y
+        return x
 
 
-# TODO: move this custom implementation somewhere, maybe a func store?
-class BoxCoxTransformation(Transformation):
+class BoxCoxTransformation(ReversibleTransformation):
     """Box-Cox transformation.
 
      For positive-only or negative-only data, no parameters are needed.
@@ -68,7 +74,7 @@ class BoxCoxTransformation(Transformation):
     def __init__(self, lambda2: float = 0.1):
         super().__init__(lambda2=lambda2)
 
-    def transform(self, x: np.array) -> Tuple[np.array, dict]:
+    def transform(self, x: np.array) -> np.array:
         params = {}
         if (x[~np.isnan(x)] + self.params.lambda2 > 0).all():
             y, params["lambda1"] = BoxCox.transform_boxcox(
@@ -87,7 +93,7 @@ class BoxCoxTransformation(Transformation):
         self._set_params(**params)
         return y
 
-    def back_transform(self, x: np.array) -> np.array:
+    def back_transform(self, x: pd.Series) -> pd.Series:
         try:
             y = (
                 BoxCox.untransform_boxcox(BoxCox(), x, lmbda=self.params.lambda1)
@@ -103,7 +109,7 @@ class BoxCoxTransformation(Transformation):
                 # Resolve a numpy problem for raising a number close to 0 to a large number, i.e. -0.12^6.25
                 y = (np.zeros(*x.shape) - self.params.lambda2) / self.params.lambda3
             else:
-                logger.warn(
+                logger.warning(
                     "Back-transform failed for y(x, lambda1, lambda2, lambda3) with:\n"
                     "x = %s\n"
                     "lambda1 = %s\n"

@@ -21,7 +21,7 @@ from ts_forecasting_pipeline.utils.time_utils import (
     timedelta_fits_into,
 )
 from ts_forecasting_pipeline.exceptions import IncompatibleModelSpecs
-from ts_forecasting_pipeline.transforming import Transformation
+from ts_forecasting_pipeline.transforming import ReversibleTransformation
 
 """
 Specs for the context of your model and how to treat your model data.
@@ -56,7 +56,9 @@ class SeriesSpecs(object):
     # timezone of the data - useful when de-serializing (e.g. pandas serialises to UTC)
     original_tz: tzinfo
     # Custom transformation to perform on the outcome data. Called after relevant SeriesSpecs were resolved.
-    transformation: Optional[Transformation]
+    transformation: Optional[ReversibleTransformation]
+    #
+    # post_load
     # Custom resampling parameters. All parameters apply to pd.resample, only "aggregation" is the name
     # of the aggregation function to be called of the resulting resampler
     resampling_config: Dict[str, Any]
@@ -65,7 +67,7 @@ class SeriesSpecs(object):
         self,
         name: str,
         original_tz: Optional[tzinfo] = None,
-        transformation: Optional[Transformation] = None,
+        transformation: Optional[ReversibleTransformation] = None,
         resampling_config: Dict[str, Any] = None,
     ):
         self.name = name
@@ -81,9 +83,7 @@ class SeriesSpecs(object):
         """Subclasses overwrite this function to get the raw data"""
         return pd.Series()
 
-    def load_series(
-        self, expected_frequency: timedelta
-    ) -> pd.Series:
+    def load_series(self, expected_frequency: timedelta) -> pd.Series:
         """Load the series data, check compatibility of series data with model specs and transform, if needed.
 
            The actual implementation how to load is deferred to _load_series. Overwrite that for new subclasses.
@@ -120,9 +120,19 @@ class SeriesSpecs(object):
                 "Nan values found in the requested %s data. It's no use to continue I'm afraid."
             )
 
-        # check if time series frequency is okay, if not then resample
-        if data.index.freq.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
+        # check if time series frequency is okay, if not then resample, and check again
+        if data.index.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
             data = self.resample_data(data, expected_frequency)
+
+            if data.index.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
+                raise Exception(
+                    "Loaded data for %s has different frequency (%s) than used in model (%s)."
+                    % (
+                        self.name,
+                        data.index.freqstr,
+                        timedelta_to_pandas_freq_str(expected_frequency),
+                    )
+                )
 
         if self.transformation is not None:
             data = pd.Series(
@@ -139,7 +149,11 @@ class SeriesSpecs(object):
         else:
             data_resampler = data.resample(
                 timedelta_to_pandas_freq_str(expected_frequency),
-                **{k: v for k, v in self.resampling_config.items() if k != "aggregation"}
+                **{
+                    k: v
+                    for k, v in self.resampling_config.items()
+                    if k != "aggregation"
+                }
             )
             if "aggregation" not in self.resampling_config:
                 data = data_resampler.mean()
@@ -173,7 +187,7 @@ class ObjectSeriesSpecs(SeriesSpecs):
         data: pd.Series,
         name: str,
         original_tz: Optional[tzinfo] = None,
-        transformation: Optional[Transformation] = None,
+        transformation: Optional[ReversibleTransformation] = None,
         resampling_config: Dict[str, Any] = None,
     ):
         super().__init__(name, original_tz, transformation, resampling_config)
@@ -208,7 +222,7 @@ class DFFileSeriesSpecs(SeriesSpecs):
         name: str,
         column: str = None,
         original_tz: Optional[tzinfo] = None,
-        transformation: Transformation = None,
+        transformation: ReversibleTransformation = None,
         resampling_config: Dict[str, Any] = None,
     ):
         super().__init__(name, original_tz, transformation, resampling_config)
@@ -238,8 +252,8 @@ class DBSeriesSpecs(SeriesSpecs):
         query: Query,
         name: str = "value",
         original_tz: Optional[tzinfo] = pytz.utc,  # postgres stores naive datetimes
-        transformation: Transformation = None,
-            resampling_config: Dict[str, Any] = None,
+        transformation: ReversibleTransformation = None,
+        resampling_config: Dict[str, Any] = None,
     ):
         super().__init__(name, original_tz, transformation, resampling_config)
         self.db_engine = db_engine
