@@ -6,11 +6,11 @@ import numpy as np
 import statsmodels.api as sm
 from matplotlib import pyplot as plt
 
-from ts_forecasting_pipeline.speccing import ModelSpecs
-from ts_forecasting_pipeline.featuring import construct_features
-from ts_forecasting_pipeline.serializing import save_model
-from ts_forecasting_pipeline.exceptions import MissingData, UnsupportedModel
-from ts_forecasting_pipeline import MODEL_TYPES, ModelState
+from timetomodel.speccing import ModelSpecs
+from timetomodel.featuring import construct_features
+from timetomodel.serializing import save_model
+from timetomodel.exceptions import MissingData, UnsupportedModel
+from timetomodel import MODEL_TYPES, ModelState
 
 
 """
@@ -81,12 +81,14 @@ def evaluate_models(
     try:
         y_hat_test = fitted_m1.predict(x_test)
     except TypeError:
-        y_hat_test = fitted_m1.predict(start=x_test.index[0], end=x_test.index[-1], exog=x_test)
+        y_hat_test = fitted_m1.predict(
+            start=x_test.index[0], end=x_test.index[-1], exog=x_test
+        )
 
     # Back-transform if the data was transformed
-    if m1_specs.transformation is not None:
-        y_test = m1_specs.transformation.back_transform(y_test)
-        y_hat_test = m1_specs.transformation.back_transform(y_hat_test)
+    if m1_specs.outcome_var.feature_transformation is not None:
+        y_test = m1_specs.outcome_var.feature_transformation.back_transform(y_test)
+        y_hat_test = m1_specs.outcome_var.feature_transformation.back_transform(y_hat_test)
 
     print(
         "rmse = %s"

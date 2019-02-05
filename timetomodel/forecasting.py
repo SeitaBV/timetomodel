@@ -5,10 +5,10 @@ import logging
 import pandas as pd
 import pytz
 
-from ts_forecasting_pipeline import MODEL_CLASSES, ModelState, ModelSpecs
-from ts_forecasting_pipeline.modelling import create_fitted_model
-from ts_forecasting_pipeline.featuring import construct_features, get_time_steps
-from ts_forecasting_pipeline.utils.time_utils import timedelta_to_pandas_freq_str
+from timetomodel import MODEL_CLASSES, ModelState, ModelSpecs
+from timetomodel.modelling import create_fitted_model
+from timetomodel.featuring import construct_features, get_time_steps
+from timetomodel.utils.time_utils import timedelta_to_pandas_freq_str
 
 
 """
@@ -84,11 +84,15 @@ def make_rolling_forecasts(
             dt.replace(tzinfo=pytz.utc)
 
     # First, compute one big feature frame, once.
-    feature_frame: pd.DataFrame = construct_features((model_specs.start_of_training, end), model_specs)
+    feature_frame: pd.DataFrame = construct_features(
+        (model_specs.start_of_training, end), model_specs
+    )
 
     pd_frequency = timedelta_to_pandas_freq_str(model_specs.frequency)
     values = pd.Series(
-        index=pd.date_range(start, end, freq=pd_frequency, closed="left", tz=start.tzinfo)
+        index=pd.date_range(
+            start, end, freq=pd_frequency, closed="left", tz=start.tzinfo
+        )
     )
     time_step = start
     model = None

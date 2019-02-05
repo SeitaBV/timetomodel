@@ -1,8 +1,8 @@
 from setuptools import setup
 
 setup(
-    name="ts_forecasting_pipeline",
-    description="Toolset for time series forecasting. Supports both basic modeling and in-production usage.",
+    name="timetomodel",
+    description="Sane handling of time series data for forecast modelling - with production usage in mind.",
     author="Seita BV",
     author_email="nicolas@seita.nl",
     keywords=["time series", "forecasting"],
@@ -19,7 +19,7 @@ setup(
         "SQLAlchemy",
     ],
     tests_require=["pytest"],
-    packages=["ts_forecasting_pipeline", "ts_forecasting_pipeline.utils"],
+    packages=["timetomodel", "timetomodel.utils"],
     include_package_data=True,
     classifiers=[
         "Programming Language :: Python",
@@ -32,10 +32,13 @@ setup(
         "Topic :: Scientific/Engineering :: Information Analysis",
     ],
     long_description="""\
-    Toolset for time series forecasting, based on fundamental data science libraries like Pandas,
-    statsmodels, sklearn etc.
-    Supports model design as well as storing and accessing forecasts.
-    It contains functionality that is both useful for data & model exploration as well as 
-    integrating into production code.
+    Sane handling of time series data for forecast modelling - with production usage in mind.
+    While modelling time series data with data science libraries like Pandas, statsmodels, sklearn etc.,
+    dealing with time series data is cumbersome - timetomdel takes some of that over. Loading data, making
+    train/test data, feeding data into rolling forecasts...
+    Also, the context and assumptions under which a model was made and used should not be in notebooks, they should
+    have a readable and reproducible spec.
+    Timetomodel is hopefully useful while doing data & model exploration as well as when integrating or replacing 
+    models in production environments.
     """,
 )

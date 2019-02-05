@@ -11,9 +11,9 @@ from typing import Type
 from statsmodels.base.model import LikelihoodModelResults as StatsModel
 import pandas as pd
 
-from ts_forecasting_pipeline.speccing import SeriesSpecs, DBSeriesSpecs, ModelSpecs
-from ts_forecasting_pipeline.exceptions import ModelLocationProblem
-from ts_forecasting_pipeline import ModelState
+from timetomodel.speccing import SeriesSpecs, DBSeriesSpecs, ModelSpecs
+from timetomodel.exceptions import ModelLocationProblem
+from timetomodel import ModelState
 
 
 MODEL_DIR = "models"

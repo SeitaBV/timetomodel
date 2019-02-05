@@ -2,7 +2,13 @@ from datetime import datetime, timedelta
 
 import pytz
 
-from ts_forecasting_pipeline.utils.time_utils import round_datetime, timedelta_fits_into, timedelta_to_pandas_freq_str, get_closest_quarter, get_most_recent_quarter
+from timetomodel.utils.time_utils import (
+    round_datetime,
+    timedelta_fits_into,
+    timedelta_to_pandas_freq_str,
+    get_closest_quarter,
+    get_most_recent_quarter,
+)
 
 
 def test_find_quarter():
@@ -30,7 +36,7 @@ def test_timedelta_to_pd_freq_str():
 
 def test_round_time_by_hour():
     dt = datetime(2018, 1, 26, 14, 40)
-    round_to_hour = round_datetime(dt, by_seconds=60*60)
+    round_to_hour = round_datetime(dt, by_seconds=60 * 60)
     assert round_to_hour.day == dt.day
     assert round_to_hour.hour == 15
     assert round_to_hour.minute == 00
@@ -38,7 +44,7 @@ def test_round_time_by_hour():
 
 def test_round_time_by_15min():
     dt = datetime(2018, 1, 26, 14, 40)
-    round_to_hour = round_datetime(dt, by_seconds=60*15)
+    round_to_hour = round_datetime(dt, by_seconds=60 * 15)
     assert round_to_hour.day == dt.day
     assert round_to_hour.hour == 14
     assert round_to_hour.minute == 45

@@ -7,8 +7,8 @@ import pandas as pd
 from statsmodels.regression.linear_model import RegressionResultsWrapper
 from statsmodels.api import OLS
 
-from ts_forecasting_pipeline import ModelState, speccing, modelling, serializing
-from ts_forecasting_pipeline.utils.time_utils import get_most_recent_quarter, tz_aware_utc_now
+from timetomodel import ModelState, speccing, modelling, serializing
+from timetomodel.utils.time_utils import get_most_recent_quarter, tz_aware_utc_now
 
 """
 These tests should test model lifecycle, but are not very relevant right now, as that functionality still needs to 

@@ -1,6 +1,6 @@
-# Time series forecasting pipeline
+# timetomodel
 
-[![Build Status](https://travis-ci.com/SeitaBV/ts-forecasting-pipeline.svg?branch=master)](https://travis-ci.com/SeitaBV/ts-forecasting-pipeline)
+[![Build Status](https://travis-ci.com/SeitaBV/timetomodel.svg?branch=master)](https://travis-ci.com/SeitaBV/timetomodel)
 
 This repository contains code to support time series forecasting.
 
@@ -29,8 +29,8 @@ TODO
 ### Dependencies using Anaconda
 
 * Install Anaconda for Python3.6+
-* Make a virtual environment: `conda create --name tsfp-venv python=3.6`
-* Activate it: `source activate tsfp-venv` (or `activate tsfp-venv` for Windows)
+* Make a virtual environment: `conda create --name timetomodel-venv python=3.6`
+* Activate it: `source activate timetomodel-venv` (or `activate timetomodel-venv` for Windows)
 * Install dependencies by running setup: `python setup.py develop`
 
 ### Notebooks
@@ -39,11 +39,6 @@ TODO
 
       conda install -c conda-forge nbstripout
       nbstripout --install
-
-
-### Using ts-forecasting-pipeline on a server
-
-On a server, you are not interested in the plotting capabilities, so 
 
 
 ## Glossary
@@ -70,8 +65,6 @@ Forecast			| Forecast for a single timeslot made during another timeslot.
 
 ## Automated tests
 
-High-level tests for forecasting models are stated in *test_models.py*.
-Add any new models you want to include in the tests there.
 To run the tests, use:
 
-        python -m pytest tests/
+    python -m pytest tests/

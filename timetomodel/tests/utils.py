@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 from statsmodels.api import OLS
 
-from ts_forecasting_pipeline import speccing, modelling, transforming
+from timetomodel import speccing, modelling, transforming
 
 
 logger = logging.getLogger(__name__)

@@ -17,7 +17,7 @@ MODEL_TYPES = Union[MODEL_CLASSES]
 
 
 # First public import block
-from ts_forecasting_pipeline.speccing import (
+from timetomodel.speccing import (
     ModelSpecs,
     ObjectSeriesSpecs,
     DFFileSeriesSpecs,
@@ -56,13 +56,13 @@ class ModelState(object):
 
 
 # second public import block
-from ts_forecasting_pipeline.modelling import (
+from timetomodel.modelling import (
     create_fitted_model,
     evaluate_models,
     model_param_grid_search,
 )
-from ts_forecasting_pipeline.forecasting import (
+from timetomodel.forecasting import (
     make_forecast_for,
     make_rolling_forecasts,
 )
-from ts_forecasting_pipeline.serializing import save_model, load_model
+from timetomodel.serializing import save_model, load_model

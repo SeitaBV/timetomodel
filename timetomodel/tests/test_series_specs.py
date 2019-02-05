@@ -4,9 +4,9 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from ts_forecasting_pipeline.speccing import ObjectSeriesSpecs, CSVFileSeriesSpecs
-from ts_forecasting_pipeline.transforming import Transformation
-from ts_forecasting_pipeline.tests.utils import MyMultiplicationTransformation
+from timetomodel.speccing import ObjectSeriesSpecs, CSVFileSeriesSpecs
+from timetomodel.transforming import Transformation
+from timetomodel.tests.utils import MyMultiplicationTransformation
 
 
 def test_load_series_without_datetime_index():

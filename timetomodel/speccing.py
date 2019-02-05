@@ -15,14 +15,14 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Query
 from sqlalchemy.dialects import postgresql
 
-from ts_forecasting_pipeline.utils.debug_utils import render_query
-from ts_forecasting_pipeline.utils.time_utils import (
+from timetomodel.utils.debug_utils import render_query
+from timetomodel.utils.time_utils import (
     tz_aware_utc_now,
     timedelta_to_pandas_freq_str,
     timedelta_fits_into,
 )
-from ts_forecasting_pipeline.exceptions import IncompatibleModelSpecs
-from ts_forecasting_pipeline.transforming import (
+from timetomodel.exceptions import IncompatibleModelSpecs
+from timetomodel.transforming import (
     Transformation,
     ReversibleTransformation,
 )

@@ -8,8 +8,8 @@ import logging
 import pandas as pd
 import pytz
 
-from ts_forecasting_pipeline.speccing import ModelSpecs
-from ts_forecasting_pipeline.utils.time_utils import (
+from timetomodel.speccing import ModelSpecs
+from timetomodel.utils.time_utils import (
     timedelta_to_pandas_freq_str,
     round_datetime,
     timedelta_fits_into,
