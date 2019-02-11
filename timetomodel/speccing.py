@@ -57,7 +57,7 @@ class SeriesSpecs(object):
     name: str
     # The name of the data column in the data source. If None, the name will be tried.
     column: Optional[str]
-    # timezone of the data - useful when de-serializing (e.g. pandas serialises to UTC)
+    # timezone of the data - e.g. useful when de-serializing data (pandas serialises to UTC)
     original_tz: tzinfo
     # Custom transformation on feature data to be made before forecasting, back-transformed right after.
     feature_transformation: Optional[ReversibleTransformation]

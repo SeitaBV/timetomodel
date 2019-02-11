@@ -50,7 +50,7 @@ def create_dummy_model_state(
         end_of_testing=data_start + timedelta(hours=int(data_range_in_hours / 3)),
     )
     return modelling.ModelState(
-        modelling.create_fitted_model(specs, version="0.1", save=False), specs
+        modelling.create_fitted_model(specs, version="0.1"), specs
     )
 
 

@@ -8,7 +8,6 @@ from matplotlib import pyplot as plt
 
 from timetomodel.speccing import ModelSpecs
 from timetomodel.featuring import construct_features
-from timetomodel.serializing import save_model
 from timetomodel.exceptions import MissingData, UnsupportedModel
 from timetomodel import MODEL_TYPES, ModelState
 
@@ -22,12 +21,9 @@ def create_fitted_model(
     specs: ModelSpecs,
     version: str,
     regression_frame: pd.DataFrame = None,
-    save: bool = False,
 ) -> MODEL_TYPES:
     """
     Create a new fitted model with the given specs.
-    If needed, the fitted model and specs can be persisted to file. From there, they can be loaded back with
-    load_model.
     """
     if regression_frame is None:
         regression_frame = construct_features(time_range="train", specs=specs)
@@ -54,9 +50,6 @@ def create_fitted_model(
         fitted_model.params = fitted_model.get_params
     else:
         raise UnsupportedModel("Unknown model type: %s " % specs.model_type)
-
-    if save:
-        save_model(ModelState(fitted_model, specs), version)
 
     return fitted_model
 
