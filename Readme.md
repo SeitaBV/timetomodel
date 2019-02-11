@@ -1,6 +1,8 @@
 # timetomodel
 
 [![Build Status](https://travis-ci.com/SeitaBV/timetomodel.svg?branch=master)](https://travis-ci.com/SeitaBV/timetomodel)
+[![Python Version](https://img.shields.io/pypi/pyversions/timetomodel.svg)](https://pypi.python.org/pypi/timetomodel)
+[![Pypi Version](https://img.shields.io/pypi/v/timetomodel.svg)](https://pypi.python.org/pypi/timetomodel)
 
 This repository contains code to support time series forecasting.
 
