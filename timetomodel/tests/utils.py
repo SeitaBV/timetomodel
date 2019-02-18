@@ -71,7 +71,7 @@ class MyAdditionTransformation(transforming.ReversibleTransformation):
         logger.debug("Adding %s to %s ..." % (self.params.addition, x))
         return x + self.params.addition
 
-    def back_transform(self, y: np.array):
+    def back_transform_value(self, y: np.array):
         logger.debug("Subtracting %s from %s ..." % (self.params.addition, y))
         return y - self.params.addition
 
@@ -80,5 +80,5 @@ class MyMultiplicationTransformation(transforming.ReversibleTransformation):
     def transform_series(self, x: pd.Series):
         return x * self.params.factor
 
-    def back_transform(self, y: np.array):
+    def back_transform_value(self, y: np.array):
         return y / self.params.factor

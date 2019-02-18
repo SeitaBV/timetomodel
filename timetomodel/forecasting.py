@@ -33,7 +33,7 @@ def make_forecast_for(
 
     # Apply back-transformation, as the output data was transformed before
     if specs.outcome_var.feature_transformation is not None:
-        y_hat = specs.outcome_var.feature_transformation.back_transform(y_hat)
+        y_hat = specs.outcome_var.feature_transformation.back_transform_value(y_hat)
 
     return y_hat
 
