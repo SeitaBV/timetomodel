@@ -74,7 +74,7 @@ def test_rolling_forecast_with_refitting(caplog):
     """ Also rolling forecasting, but with re-fitting the model in between.
     We'll test if the expected number of re-fittings happened.
     Also, the model we end up with should not be the one we started with."""
-    caplog.set_level(logging.INFO, logger="timetomodel.forecasting")
+    caplog.set_level(logging.DEBUG, logger="timetomodel.forecasting")
     model, specs = test_utils.create_dummy_model_state(
         DATA_START, data_range_in_hours=192
     ).split()

@@ -2,13 +2,11 @@ from typing import List, Optional, Tuple, Type, Union, Dict, Any
 from datetime import datetime, timedelta, tzinfo
 from pprint import pformat
 import os
-import json
 import warnings
 import logging
 import inspect
 
 import pytz
-import dateutil.parser
 import numpy as np
 import pandas as pd
 from sqlalchemy.engine import Engine
@@ -21,11 +19,8 @@ from timetomodel.utils.time_utils import (
     timedelta_to_pandas_freq_str,
     timedelta_fits_into,
 )
-from timetomodel.exceptions import IncompatibleModelSpecs
-from timetomodel.transforming import (
-    Transformation,
-    ReversibleTransformation,
-)
+from timetomodel.exceptions import IncompatibleModelSpecs, NaNData, MissingData
+from timetomodel.transforming import Transformation, ReversibleTransformation
 
 """
 Specs for the context of your model and how to treat your model data.
@@ -94,7 +89,10 @@ class SeriesSpecs(object):
         return data
 
     def load_series(
-        self, expected_frequency: timedelta, transform_features: bool = False
+        self,
+        expected_frequency: timedelta,
+        transform_features: bool = False,
+        check_time_window: Optional[Tuple[datetime, datetime]] = None,
     ) -> pd.Series:
         """Load the series data, check compatibility of series data with model specs
            and perform feature transformation, if needed.
@@ -107,6 +105,10 @@ class SeriesSpecs(object):
            kw params to pass into `resample`. For example:
 
            `resampling_config={"closed": "left", "aggregation": "sum"}`
+
+           You can check if a time window would be feasible, i.e. if enough data is loaded, and get suggestions.
+           Subclasses of SeriesSpecs can also re-implement this method. Be sure to pass datetimes with tzinfo
+           compatible to your data.
         """
         data = self._load_series()
 
@@ -125,21 +127,37 @@ class SeriesSpecs(object):
 
         # Raise error if data is empty or contains nan values
         if data.empty:
-            raise ValueError(
+            raise MissingData(
                 "No values found in requested %s data. It's no use to continue I'm afraid."
             )
         if data.isnull().values.any():
-            raise ValueError(
+            raise NaNData(
                 "Nan values found in the requested %s data. It's no use to continue I'm afraid."
             )
+
+        # check if we have enough data for the expected time window
+        if check_time_window is not None:
+            error_msg = ""
+            if data.index[0] > check_time_window[0]:
+                error_msg += (
+                    "Data starts too late (at %s), while we need data from %s"
+                    % (data.index[0], check_time_window[0])
+                )
+            if data.index[-1] < check_time_window[1]:
+                error_msg += (
+                    "Data ends too early (at %s), while we need data until %s"
+                    % (data.index[0], check_time_window[0])
+                )
+            if error_msg:
+                raise MissingData(error_msg)
 
         # check if time series frequency is okay, if not then resample, and check again
         if data.index.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
             data = self.resample_data(data, expected_frequency)
 
             if data.index.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
-                raise Exception(
-                    "Loaded data for %s has different frequency (%s) than used in model (%s)."
+                raise IncompatibleModelSpecs(
+                    "Loaded data for %s has different frequency (%s) than used in model specs expect (%s)."
                     % (
                         self.name,
                         data.index.freqstr,
@@ -303,7 +321,9 @@ class CSVFileSeriesSpecs(SeriesSpecs):
 
     def _load_series(self) -> pd.Series:
         if not os.path.exists(self.file_path):
-            raise IncompatibleModelSpecs("Filepath %s does not seem to exist." % self.file_path)
+            raise IncompatibleModelSpecs(
+                "Filepath %s does not seem to exist." % self.file_path
+            )
 
         if self.read_csv_config is None:
             df: pd.DataFrame = pd.read_csv(self.file_path)
@@ -361,7 +381,7 @@ class DBSeriesSpecs(SeriesSpecs):
             columns=[col["name"] for col in self.query.column_descriptions],
         )
 
-        self.check_for_nan(df)
+        self.check_data(df)
 
         df["datetime"] = pd.to_datetime(df["datetime"], utc=True)
 
@@ -372,11 +392,11 @@ class DBSeriesSpecs(SeriesSpecs):
 
         return df["value"]
 
-    def check_for_nan(self, df: pd.DataFrame):
+    def check_data(self, df: pd.DataFrame):
         """ Raise error if data is empty or contains nan values.
         Here, other than in load_series, we can show the query, which is quite helpful."""
         if df.empty:
-            raise ValueError(
+            raise MissingData(
                 "No values found in database for the requested %s data. It's no use to continue I'm afraid."
                 " Here's a print-out of the database query:\n\n%s\n\n"
                 % (
@@ -385,7 +405,7 @@ class DBSeriesSpecs(SeriesSpecs):
                 )
             )
         if df.isnull().values.any():
-            raise ValueError(
+            raise NaNData(
                 "Nan values found in database for the requested %s data. It's no use to continue I'm afraid."
                 " Here's a print-out of the database query:\n\n%s\n\n"
                 % (
@@ -419,23 +439,22 @@ class ModelSpecs(object):
 
     def __init__(
         self,
-        outcome_var: Union[str, SeriesSpecs, pd.Series],
+        outcome_var: Union[SeriesSpecs, pd.Series],
         model: Union[
             Type, Tuple[Type, dict]
         ],  # Model class and optionally initialization parameters
-        start_of_training: Union[str, datetime],
-        end_of_testing: Union[str, datetime],
+        start_of_training: datetime,
+        end_of_testing: datetime,
         frequency: timedelta,
         horizon: timedelta,
         lags: List[int] = None,
-        regressors: Union[List[str], List[SeriesSpecs], List[pd.Series]] = None,
+        regressors: Union[List[SeriesSpecs], List[pd.Series]] = None,
         ratio_training_testing_data=DEFAULT_RATIO_TRAINING_TESTING_DATA,
         remodel_frequency: Union[str, timedelta] = DEFAULT_REMODELING_FREQUENCY,
         model_filename: str = None,
-        creation_time: Union[str, datetime] = None,
+        creation_time: datetime = None,
     ):
-        """Create a ModelSpecs instance. Accepts all parameters as string (besides transform - TODO) for
-         deserialization support (JSON strings for all parameters which are not natively JSON-parseable,)"""
+        """Create a ModelSpecs instance."""
         self.outcome_var = parse_series_specs(outcome_var, "y")
         self.model_type = model[0] if isinstance(model, tuple) else model
         self.model_params = model[1] if isinstance(model, tuple) else {}
@@ -451,14 +470,8 @@ class ModelSpecs(object):
                 parse_series_specs(r, "Regressor%d" % (regressors.index(r) + 1))
                 for r in regressors
             ]
-        if isinstance(start_of_training, str):
-            self.start_of_training = dateutil.parser.parse(start_of_training)
-        else:
-            self.start_of_training = start_of_training
-        if isinstance(end_of_testing, str):
-            self.end_of_testing = dateutil.parser.parse(end_of_testing)
-        else:
-            self.end_of_testing = end_of_testing
+        self.start_of_training = start_of_training
+        self.end_of_testing = end_of_testing
         self.ratio_training_testing_data = ratio_training_testing_data
         # check if training + testing period is compatible with frequency
         if not timedelta_fits_into(
@@ -469,19 +482,12 @@ class ModelSpecs(object):
                 % (self.start_of_training, self.end_of_testing, self.frequency)
             )
 
-        if isinstance(creation_time, str):
-            self.creation_time = dateutil.parser.parse(creation_time)
-        elif creation_time is None:
+        if creation_time is None:
             self.creation_time = tz_aware_utc_now()
         else:
             self.creation_time = creation_time
         self.model_filename = model_filename
-        if isinstance(remodel_frequency, str):
-            self.remodel_frequency = timedelta(
-                days=int(remodel_frequency) / 60 / 60 / 24
-            )
-        else:
-            self.remodel_frequency = remodel_frequency
+        self.remodel_frequency = remodel_frequency
 
     def as_dict(self):
         return vars(self)
@@ -491,27 +497,9 @@ class ModelSpecs(object):
 
 
 def parse_series_specs(
-    specs: Union[str, SeriesSpecs, pd.Series], name: str = None
+    specs: Union[SeriesSpecs, pd.Series], name: str = None
 ) -> SeriesSpecs:
-    if isinstance(specs, str):
-        return load_series_specs_from_json(specs)
-    elif isinstance(specs, pd.Series):
+    if isinstance(specs, pd.Series):
         return ObjectSeriesSpecs(specs, name)
     else:
         return specs
-
-
-def load_series_specs_from_json(s: str) -> SeriesSpecs:
-    json_repr = json.loads(s)
-    series_class = globals()[json_repr["__series_type__"]]
-    if series_class == ObjectSeriesSpecs:
-        # load pd.Series from string, will be UTC-indexed, so apply original_tz
-        json_repr["data"] = pd.read_json(
-            json_repr["data"], typ="series", convert_dates=True
-        )
-        json_repr["data"].index = json_repr["data"].index.tz_localize(
-            json_repr["original_tz"]
-        )
-    return series_class(
-        **{k: v for k, v in json_repr.items() if not k.startswith("__")}
-    )

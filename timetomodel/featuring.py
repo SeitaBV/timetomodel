@@ -14,6 +14,7 @@ from timetomodel.utils.time_utils import (
     round_datetime,
     timedelta_fits_into,
 )
+from timetomodel.exceptions import NaNData
 
 
 logger = logging.getLogger(__name__)
@@ -31,14 +32,17 @@ def construct_features(
     determine the time steps.
     """
     df = pd.DataFrame()
+    datetime_indices = get_time_steps(time_range, specs)
 
     # load raw data series for the outcome data and regressors
     df[specs.outcome_var.name] = specs.outcome_var.load_series(
-        expected_frequency=specs.frequency, transform_features=True
+        expected_frequency=specs.frequency, transform_features=True,
+        check_time_window=(datetime_indices[0], datetime_indices[-1])
     )
     for reg_spec in specs.regressors:
         df[reg_spec.name] = reg_spec.load_series(
-            expected_frequency=specs.frequency, transform_features=True
+            expected_frequency=specs.frequency, transform_features=True,
+            check_time_window=(datetime_indices[0], datetime_indices[-1])
         )
 
     # add lags on the outcome var
@@ -52,7 +56,6 @@ def construct_features(
     ]
 
     # now select only relevant columns and relevant datetime indices
-    datetime_indices = get_time_steps(time_range, specs)
     relevant_columns = (
         [specs.outcome_var.name] + outcome_lags + [r.name for r in specs.regressors]
     )
@@ -60,8 +63,9 @@ def construct_features(
 
     # Check for nan values in lagged and regressor data
     if df.drop(specs.outcome_var.name, axis=1).isnull().values.any():
-        raise Exception(
-            "I found nan values and I obviously can't make forecasts lacking data. Here's how many I found:\n\n%s\n\n"
+        raise NaNData(
+            "I found nan values in the feature frame I just constructed and I obviously can't"
+            " make forecasts lacking data. Here's how many I found:\n\n%s\n\n"
             % df.drop(specs.outcome_var.name, axis=1).isnull().sum()
         )
 
@@ -124,8 +128,8 @@ def get_time_steps(
         end_of_training = round_datetime(
             end_of_training, specs.frequency.total_seconds()
         )
-        logger.info("Start of training: %s" % specs.start_of_training)
-        logger.info("End of training: %s" % end_of_training)
+        logger.debug("Start of training: %s" % specs.start_of_training)
+        logger.debug("End of training: %s" % end_of_training)
         return pd.date_range(
             specs.start_of_training, end_of_training, freq=pd_frequency
         )
@@ -138,8 +142,8 @@ def get_time_steps(
         start_of_testing = round_datetime(
             start_of_testing, specs.frequency.total_seconds()
         )
-        logger.info("Start of testing: %s" % start_of_testing)
-        logger.info("End of testing: %s" % specs.end_of_testing)
+        logger.debug("Start of testing: %s" % start_of_testing)
+        logger.debug("End of testing: %s" % specs.end_of_testing)
         return pd.date_range(start_of_testing, specs.end_of_testing, freq=pd_frequency)
 
 

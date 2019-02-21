@@ -13,13 +13,15 @@ class MissingData(Exception):
     pass
 
 
+class NaNData(Exception):
+    """Data is NaN where they needs to be some."""
+
+    pass
+
+
 class UnsupportedModel(Exception):
     """If a statistic model is not implemented in this tool (yet)."""
 
     pass
 
 
-class ModelLocationProblem(Exception):
-    """If a serialised model cannot be found."""
-
-    pass

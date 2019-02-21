@@ -3,10 +3,12 @@ from datetime import datetime, timedelta
 import pytest
 import pandas as pd
 import numpy as np
+import pytz
 
 from timetomodel.speccing import ObjectSeriesSpecs, CSVFileSeriesSpecs
 from timetomodel.transforming import Transformation
 from timetomodel.tests.utils import MyMultiplicationTransformation
+from timetomodel.exceptions import MissingData, NaNData, IncompatibleModelSpecs
 
 
 def test_load_series_without_datetime_index():
@@ -27,10 +29,44 @@ def test_load_series():
     )
     assert (
         s.load_series(expected_frequency=timedelta(minutes=15)).loc[
-            dt + timedelta(minutes=15)
+            dt + timedelta(minutes=30)
         ]
-        == 2
+        == 3
     )
+
+
+def test_load_series_with_expected_time_window():
+    dt = datetime(2019, 1, 29, 15, 15, tzinfo=pytz.utc)
+    s = ObjectSeriesSpecs(
+        data=pd.Series(
+            index=pd.date_range(dt, dt + timedelta(minutes=30), freq="15T"),
+            data=[1, 2, 3],
+        ),
+        name="mydata",
+    )
+    assert (
+        s.load_series(expected_frequency=timedelta(minutes=15),
+                      check_time_window=(dt, dt + timedelta(minutes=30))).loc[
+            dt + timedelta(minutes=30)
+        ]
+        == 3
+    )
+
+
+def test_load_series_with_larger_expected_time_window():
+    dt = datetime(2019, 1, 29, 15, 15, tzinfo=pytz.utc)
+    s = ObjectSeriesSpecs(
+        data=pd.Series(
+            index=pd.date_range(dt, dt + timedelta(minutes=30), freq="15T"),
+            data=[1, 2, 3],
+        ),
+        name="mydata",
+    )
+    with pytest.raises(MissingData) as e_info:
+        s.load_series(expected_frequency=timedelta(minutes=15),
+                      check_time_window=(dt - timedelta(minutes=15), dt + timedelta(minutes=45)))
+    assert "starts too late" in str(e_info.value)
+    assert "ends too early" in str(e_info.value)
 
 
 def test_load_series_with_frequency_resampling():
@@ -58,7 +94,7 @@ def test_load_series_with_not_existing_custom_frequency_resampling():
         resampling_config={"aggregation": "GGG"},
     )
 
-    with pytest.raises(Exception) as e_info:
+    with pytest.raises(IncompatibleModelSpecs) as e_info:
         s.load_series(expected_frequency=timedelta(hours=1))
     assert "Cannot find resampling aggregation GGG" in str(e_info.value)
 
@@ -88,7 +124,7 @@ def test_load_series_without_data():
         ),
         name="mydata",
     )
-    with pytest.raises(Exception) as e_info:
+    with pytest.raises(NaNData) as e_info:
         s.load_series(expected_frequency=timedelta(hours=1))
     assert "Nan values" in str(e_info.value)
 
@@ -102,7 +138,7 @@ def test_load_series_with_missing_data():
         ),
         name="mydata",
     )
-    with pytest.raises(Exception) as e_info:
+    with pytest.raises(NaNData) as e_info:
         s.load_series(expected_frequency=timedelta(hours=1))
     assert "Nan values" in str(e_info.value)
 

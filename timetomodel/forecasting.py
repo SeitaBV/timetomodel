@@ -50,7 +50,7 @@ def update_model(
         current_model is None
         or time_step - specs.creation_time >= specs.remodel_frequency
     ):
-        logger.info("Fitting new model before predicting %s ..." % time_step)
+        logger.debug("Fitting new model before predicting %s ..." % time_step)
         if current_model is not None:
             # move the model's series specs further in time
             specs.start_of_training = specs.start_of_training + specs.remodel_frequency

@@ -103,30 +103,21 @@ class BoxCoxTransformation(ReversibleTransformation):
                 - self.params.lambda2
             ) / self.params.lambda3
         except Warning as w:
-            if (
-                w.__str__() == "invalid value encountered in power"
-                and (x < 0).all()
-                and self.params.lambda1 < 1
-            ):
-
-                # Resolve a numpy problem for raising a number close to 0 to a large number, i.e. -0.12^6.25
-                y = (np.zeros(*x.shape) - self.params.lambda2) / self.params.lambda3
-            else:
-                logger.warning(
-                    "Back-transform failed for y(x, lambda1, lambda2, lambda3) with:\n"
-                    "x = %s\n"
-                    "lambda1 = %s\n"
-                    "lambda2 = %s\n"
-                    "lambda3 = %s\n"
-                    "warning = %s\n"
-                    "Returning 0 value instead."
-                    % (
-                        x,
-                        self.params.lambda1,
-                        self.params.lambda2,
-                        self.params.lambda3,
-                        w,
-                    )
+            logger.debug(  # not sure if this needs to be a warning, it happens quite often to me right now
+                "Back-transform failed for y(x, lambda1, lambda2, lambda3) with:\n"
+                "x = %s\n"
+                "lambda1 = %s\n"
+                "lambda2 = %s\n"
+                "lambda3 = %s\n"
+                "warning = %s\n"
+                "Returning 0 value instead."
+                % (
+                    x,
+                    self.params.lambda1,
+                    self.params.lambda2,
+                    self.params.lambda3,
+                    w,
                 )
-                y = (np.zeros(*x.shape) - self.params.lambda2) / self.params.lambda3
+            )
+            y = (0. - self.params.lambda2) / self.params.lambda3
         return y
