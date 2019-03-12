@@ -80,8 +80,8 @@ def evaluate_models(
 
     # Back-transform if the data was transformed
     if m1_specs.outcome_var.feature_transformation is not None:
-        y_test = m1_specs.outcome_var.feature_transformation.back_transform(y_test)
-        y_hat_test = m1_specs.outcome_var.feature_transformation.back_transform(y_hat_test)
+        y_test = m1_specs.outcome_var.feature_transformation.back_transform_value(y_test)
+        y_hat_test = m1_specs.outcome_var.feature_transformation.back_transform_value(y_hat_test)
 
     print(
         "rmse = %s"
