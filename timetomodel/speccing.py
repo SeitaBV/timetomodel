@@ -65,7 +65,7 @@ class SeriesSpecs(object):
     def __init__(
         self,
         name: str,
-        original_tz: Optional[tzinfo] = None,
+        original_tz: Optional[tzinfo] = None,  # TODO: why should this be possible to be set?
         feature_transformation: Optional[ReversibleTransformation] = None,
         post_load_processing: Optional[Transformation] = None,
         resampling_config: Dict[str, Any] = None,

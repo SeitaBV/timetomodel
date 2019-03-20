@@ -19,7 +19,7 @@ Functions for working with time series models.
 
 def create_fitted_model(
     specs: ModelSpecs,
-    version: str,
+    version: str,  # TODO: throw out?
     regression_frame: pd.DataFrame = None,
 ) -> MODEL_TYPES:
     """
