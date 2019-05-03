@@ -10,9 +10,9 @@ We noticed that these two worlds, data science and engineering of time series fo
 
 `timetomodel` was made to change that. It describes the data treatment of a model, and also automates common data treatment tasks like building train and test data.
 
-As a *data scientist*, experiment with a model in your notebook. Load data from static files (e.g. CSV) and try out lags, regressors and so on.
+As a *data scientist*, experiment with a model in your notebook. Load data from static files (e.g. CSV) and try out lags, regressors and so on. Compare plots and mean square errors of the models you developed.
 
-As an *engineer*, take over the model description and use it in your production code. Often, this would entail not mich more than changing the data source (e.g from CSV to a column in the database).
+As an *engineer*, take over the model description and use it in your production code. Often, this would entail not much more than changing the data source (e.g from CSV to a column in the database).
 
 `timetomodel` is supposed to wrap around any fit/predict type model, e.g. from statsmodels or scikit-learn (some work needed here to ensure support).
 
