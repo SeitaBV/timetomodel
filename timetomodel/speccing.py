@@ -146,7 +146,7 @@ class SeriesSpecs(object):
             if data.index[-1] < check_time_window[1]:
                 error_msg += (
                     "Data ends too early (at %s), while we need data until %s"
-                    % (data.index[0], check_time_window[0])
+                    % (data.index[-1], check_time_window[1])
                 )
             if error_msg:
                 raise MissingData(error_msg)
