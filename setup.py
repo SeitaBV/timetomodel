@@ -13,7 +13,7 @@ setup(
         "sklearn",
         "matplotlib",
         "numpy",
-        "scipy<=1.2.1",  # statsmodels 0.9.0 is not compatible with scipy 1.3, check again with next statsmodels release  
+        "scipy",
         "pytz",
         "python-dateutil >= 2.5",
         "SQLAlchemy",
