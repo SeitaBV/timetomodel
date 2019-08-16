@@ -6,14 +6,14 @@ setup(
     author="Seita BV",
     author_email="nicolas@seita.nl",
     keywords=["time series", "forecasting"],
-    version="0.5.4",
+    version="0.5.5",
     install_requires=[
         "pandas",
         "statsmodels",
         "sklearn",
         "matplotlib",
         "numpy",
-        "scipy<=1.2.1",  # statsmodels 0.9.0 is not compatible with scipy 1.3, check again with next statsmodels release  
+        "scipy",
         "pytz",
         "python-dateutil >= 2.5",
         "SQLAlchemy",

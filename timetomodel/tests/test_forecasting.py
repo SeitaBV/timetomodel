@@ -25,7 +25,7 @@ def test_make_one_forecast():
     ).split()
     dt = datetime(2020, 1, 22, 22, tzinfo=pytz.timezone("Europe/Amsterdam"))
     features = pd.DataFrame(
-        index=pd.DatetimeIndex(start=dt, end=dt, freq="H"),
+        index=pd.date_range(start=dt, end=dt, freq="H"),
         data={"my_outcome_l1": 892, "my_outcome_l2": 891, "Regressor1": 5},
     )
     fc = forecasting.make_forecast_for(specs, features, model)
@@ -44,7 +44,7 @@ def test_make_one_forecast_with_transformation():
         pd.Series([891, 892])
     )
     features = pd.DataFrame(
-        index=pd.DatetimeIndex(start=dt, end=dt, freq="H"),
+        index=pd.date_range(start=dt, end=dt, freq="H"),
         data={
             "my_outcome_l1": feature_data[1],
             "my_outcome_l2": feature_data[0],
