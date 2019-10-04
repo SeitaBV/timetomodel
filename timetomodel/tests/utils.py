@@ -55,12 +55,10 @@ def create_dummy_model_state(
 
 
 class MyDFPostProcessing(transforming.Transformation):
-
     def transform_dataframe(self, df: pd.DataFrame):
         """Keep the most recent observation, drop duplicates"""
         return (
-            df
-            .sort_values(by=["horizon"], ascending=True)
+            df.sort_values(by=["horizon"], ascending=True)
             .drop_duplicates(subset=["datetime"], keep="first")
             .sort_values(by=["datetime"])
         )

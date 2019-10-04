@@ -36,13 +36,15 @@ def construct_features(
 
     # load raw data series for the outcome data and regressors
     df[specs.outcome_var.name] = specs.outcome_var.load_series(
-        expected_frequency=specs.frequency, transform_features=True,
-        check_time_window=(datetime_indices[0], datetime_indices[-1])
+        expected_frequency=specs.frequency,
+        transform_features=True,
+        check_time_window=(datetime_indices[0], datetime_indices[-1]),
     )
     for reg_spec in specs.regressors:
         df[reg_spec.name] = reg_spec.load_series(
-            expected_frequency=specs.frequency, transform_features=True,
-            check_time_window=(datetime_indices[0], datetime_indices[-1])
+            expected_frequency=specs.frequency,
+            transform_features=True,
+            check_time_window=(datetime_indices[0], datetime_indices[-1]),
         )
 
     # add lags on the outcome var

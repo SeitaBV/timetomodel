@@ -11,7 +11,9 @@ def tz_aware_utc_now() -> datetime:
 
 def get_most_recent_quarter(dt: datetime = None) -> datetime:
     if dt is None:
-        dt = tz_aware_utc_now()  # TODO: maybe we should be able to configure a timezone?
+        dt = (
+            tz_aware_utc_now()
+        )  # TODO: maybe we should be able to configure a timezone?
     return dt.replace(minute=dt.minute - (dt.minute % 15), second=0, microsecond=0)
 
 

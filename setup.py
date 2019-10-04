@@ -6,7 +6,7 @@ setup(
     author="Seita BV",
     author_email="nicolas@seita.nl",
     keywords=["time series", "forecasting"],
-    version="0.5.5",
+    version="0.6.0",
     install_requires=[
         "pandas",
         "statsmodels",

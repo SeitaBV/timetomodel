@@ -61,20 +61,25 @@ class SeriesSpecs(object):
     # Custom resampling parameters. All parameters apply to pd.resample, only "aggregation" is the name
     # of the aggregation function to be called of the resulting resampler
     resampling_config: Dict[str, Any]
+    interpolation_config: Dict[str, Any]
 
     def __init__(
         self,
         name: str,
-        original_tz: Optional[tzinfo] = None,  # TODO: why should this be possible to be set?
+        original_tz: Optional[
+            tzinfo
+        ] = None,  # TODO: why should this be possible to be set?
         feature_transformation: Optional[ReversibleTransformation] = None,
         post_load_processing: Optional[Transformation] = None,
         resampling_config: Dict[str, Any] = None,
+        interpolation_config: Dict[str, Any] = None,
     ):
         self.name = name
         self.original_tz = original_tz
         self.feature_transformation = feature_transformation
         self.post_load_processing = post_load_processing
         self.resampling_config = resampling_config
+        self.interpolation_config = interpolation_config
         self.__series_type__ = self.__class__.__name__
 
     def as_dict(self):
@@ -106,11 +111,16 @@ class SeriesSpecs(object):
 
            `resampling_config={"closed": "left", "aggregation": "sum"}`
 
+            Similarly, pass in an `interpolation_config` to the class with kw params to pass into `interpolate`.
+            For example, to fill gaps of at most 1 consecutive NaN value through interpolation of the time index:
+
+            `interpolation_config={"method": "time", "limit": 1}`
+
            You can check if a time window would be feasible, i.e. if enough data is loaded, and get suggestions.
            Subclasses of SeriesSpecs can also re-implement this method. Be sure to pass datetimes with tzinfo
            compatible to your data.
         """
-        data = self._load_series()
+        data = self._load_series().sort_index()
 
         # check if data has a DateTimeIndex
         if not isinstance(data.index, pd.DatetimeIndex):
@@ -124,6 +134,9 @@ class SeriesSpecs(object):
             data.index = data.index.tz_localize(self.original_tz)
         else:
             self.original_tz = data.index.tzinfo
+
+        if self.interpolation_config is not None:
+            data = self.interpolate_data(data)
 
         # Raise error if data is empty or contains nan values
         if data.empty:
@@ -200,6 +213,16 @@ class SeriesSpecs(object):
                     )
         return data
 
+    def interpolate_data(self, data) -> pd.Series:
+        try:
+            data = data.interpolate(**self.interpolation_config)
+        except ValueError as e:
+            raise IncompatibleModelSpecs(
+                "Cannot call interpolate function with arguments %s. %s"
+                % (self.interpolation_config, e)
+            )
+        return data
+
     def __repr__(self):
         return "%s: <%s>" % (self.__class__.__name__, self.as_dict())
 
@@ -219,6 +242,7 @@ class ObjectSeriesSpecs(SeriesSpecs):
         feature_transformation: Optional[ReversibleTransformation] = None,
         post_load_processing: Optional[Transformation] = None,
         resampling_config: Dict[str, Any] = None,
+        interpolation_config: Dict[str, Any] = None,
     ):
         super().__init__(
             name,
@@ -226,6 +250,7 @@ class ObjectSeriesSpecs(SeriesSpecs):
             feature_transformation,
             post_load_processing,
             resampling_config,
+            interpolation_config,
         )
         if not isinstance(data.index, pd.DatetimeIndex):
             raise IncompatibleModelSpecs(
@@ -260,6 +285,7 @@ class DFFileSeriesSpecs(SeriesSpecs):
         feature_transformation: ReversibleTransformation = None,
         post_load_processing: Optional[Transformation] = None,
         resampling_config: Dict[str, Any] = None,
+        interpolation_config: Dict[str, Any] = None,
     ):
         super().__init__(
             name,
@@ -267,6 +293,7 @@ class DFFileSeriesSpecs(SeriesSpecs):
             feature_transformation,
             post_load_processing,
             resampling_config,
+            interpolation_config,
         )
         self.file_path = file_path
         self.time_column = time_column
@@ -306,6 +333,7 @@ class CSVFileSeriesSpecs(SeriesSpecs):
         feature_transformation: ReversibleTransformation = None,
         post_load_processing: Optional[Transformation] = None,
         resampling_config: Dict[str, Any] = None,
+        interpolation_config: Dict[str, Any] = None,
     ):
         super().__init__(
             name,
@@ -313,6 +341,7 @@ class CSVFileSeriesSpecs(SeriesSpecs):
             feature_transformation,
             post_load_processing,
             resampling_config,
+            interpolation_config,
         )
         self.file_path = file_path
         self.time_column = time_column
@@ -359,6 +388,7 @@ class DBSeriesSpecs(SeriesSpecs):
         feature_transformation: Optional[ReversibleTransformation] = None,
         post_load_processing: Optional[Transformation] = None,
         resampling_config: Dict[str, Any] = None,
+        interpolation_config: Dict[str, Any] = None,
     ):
         super().__init__(
             name,
@@ -366,6 +396,7 @@ class DBSeriesSpecs(SeriesSpecs):
             feature_transformation,
             post_load_processing,
             resampling_config,
+            interpolation_config,
         )
         self.db_engine = db_engine
         self.query = query

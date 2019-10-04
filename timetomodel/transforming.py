@@ -111,13 +111,7 @@ class BoxCoxTransformation(ReversibleTransformation):
                 "lambda3 = %s\n"
                 "warning = %s\n"
                 "Returning 0 value instead."
-                % (
-                    x,
-                    self.params.lambda1,
-                    self.params.lambda2,
-                    self.params.lambda3,
-                    w,
-                )
+                % (x, self.params.lambda1, self.params.lambda2, self.params.lambda3, w)
             )
-            y = (0. - self.params.lambda2) / self.params.lambda3
+            y = (0.0 - self.params.lambda2) / self.params.lambda3
         return y
