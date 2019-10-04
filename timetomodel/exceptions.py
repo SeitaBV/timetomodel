@@ -23,5 +23,3 @@ class UnsupportedModel(Exception):
     """If a statistic model is not implemented in this tool (yet)."""
 
     pass
-
-

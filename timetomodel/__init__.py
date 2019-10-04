@@ -61,7 +61,4 @@ from timetomodel.modelling import (
     evaluate_models,
     model_param_grid_search,
 )
-from timetomodel.forecasting import (
-    make_forecast_for,
-    make_rolling_forecasts,
-)
+from timetomodel.forecasting import make_forecast_for, make_rolling_forecasts
