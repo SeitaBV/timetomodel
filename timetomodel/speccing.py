@@ -136,9 +136,6 @@ class SeriesSpecs(object):
         else:
             self.original_tz = data.index.tzinfo
 
-        if self.interpolation_config is not None:
-            data = self.interpolate_data(data)
-
         # Raise error if data is empty or contains nan values
         if data.empty:
             raise MissingData(
@@ -178,6 +175,10 @@ class SeriesSpecs(object):
                         timedelta_to_pandas_freq_str(expected_frequency),
                     )
                 )
+
+        # interpolate after the frequency is set (setting the frequency may have created additional nan values)
+        if self.interpolation_config is not None:
+            data = self.interpolate_data(data)
 
         if transform_features and self.feature_transformation is not None:
             data = self.feature_transformation.transform_series(data)
