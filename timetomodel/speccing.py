@@ -104,21 +104,22 @@ class SeriesSpecs(object):
 
            The actual implementation how to load is deferred to _load_series. Overwrite that for new subclasses.
 
-           This function resamples data if the frequency is not compatible.
-           It is possible to customise resampling (without that, we aggregate means after default resampling.
-           Pass in a `resampling_config` to the class with an aggregation method name and
-           kw params to pass into `resample`. For example:
+           This function resamples data if the frequency is not equal to the expected frequency.
+           It is possible to customise this resampling (without that, we aggregate means after default resampling).
+           To customize resampling, pass in a `resampling_config` argument when you initialize a SeriesSpecs,
+           with an aggregation method name (e.g. "mean") and kw params which are to be passed into
+           `pandas.Series.resample`. For example:
 
            `resampling_config={"closed": "left", "aggregation": "sum"}`
 
-            Similarly, pass in an `interpolation_config` to the class with kw params to pass into `interpolate`.
-            For example, to fill gaps of at most 1 consecutive NaN value through interpolation of the time index:
+           Similarly, pass in an `interpolation_config` to the class with kw params to pass into 
+           `pandas.Series.interpolate`. For example, to fill gaps of at most 1 consecutive NaN value through
+           interpolation of the time index:
 
-            `interpolation_config={"method": "time", "limit": 1}`
+           `interpolation_config={"method": "time", "limit": 1}`
 
            You can check if a time window would be feasible, i.e. if enough data is loaded, and get suggestions.
-           Subclasses of SeriesSpecs can also re-implement this method. Be sure to pass datetimes with tzinfo
-           compatible to your data.
+           Be sure to pass datetimes with tzinfo compatible to your data.
         """
         data = self._load_series().sort_index()
 
