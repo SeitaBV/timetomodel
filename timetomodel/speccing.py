@@ -141,7 +141,7 @@ class SeriesSpecs(object):
             raise MissingData(
                 "No values found in requested %s data. It's no use to continue I'm afraid."
             )
-        if data.isnull().values.any():
+        if data.isnull().values.any() and self.interpolation_config is None:
             raise NaNData(
                 "Nan values found in the requested %s data. It's no use to continue I'm afraid."
             )
