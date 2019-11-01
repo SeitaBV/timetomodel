@@ -152,12 +152,22 @@ class SeriesSpecs(object):
             if data.index[0] > check_datetime_index_window[0]:
                 error_msg += (
                     "Data for %s starts too late (at %s), while we need data from %s "
-                    % (self.name, data.index[0], check_datetime_index_window[0].astimezone(data.index[0].tzinfo))
+                    % (
+                        self.name,
+                        data.index[0],
+                        check_datetime_index_window[0].astimezone(data.index[0].tzinfo),
+                    )
                 )
             if data.index[-1] < check_datetime_index_window[1]:
                 error_msg += (
                     "Data for %s ends too early (at %s), while we need data until %s "
-                    % (self.name, data.index[-1], check_datetime_index_window[1].astimezone(data.index[-1].tzinfo))
+                    % (
+                        self.name,
+                        data.index[-1],
+                        check_datetime_index_window[1].astimezone(
+                            data.index[-1].tzinfo
+                        ),
+                    )
                 )
             if error_msg:
                 raise MissingData(error_msg)

@@ -32,12 +32,20 @@ def construct_features(
     which is useful when we are predicting said step) but usually you’d say “train” or “test” to let the model specs
     determine the time steps.
     """
-    datetime_indices = get_time_steps(time_range, specs)  # all datetime indices of data within the given time range
+    datetime_indices = get_time_steps(
+        time_range, specs
+    )  # all datetime indices of data within the given time range
     df = pd.DataFrame(index=datetime_indices)
 
     # Determine the start and end indices for the features we'll load, taking into account lags
-    outcome_var_window = get_feature_window(datetime_indices[0], datetime_indices[-1], [specs.frequency * l for l in specs.lags])
-    regressor_window = get_feature_window(datetime_indices[0], datetime_indices[-1], [])  # regressors have no lags, todo: always the case?
+    outcome_var_window = get_feature_window(
+        datetime_indices[0],
+        datetime_indices[-1],
+        [specs.frequency * l for l in specs.lags],
+    )
+    regressor_window = get_feature_window(
+        datetime_indices[0], datetime_indices[-1], []
+    )  # regressors have no lags, todo: always the case?
 
     # load raw data series for the outcome data and regressors
     outcome_var_df = specs.outcome_var.load_series(

@@ -24,10 +24,16 @@ def create_dummy_model_state(
     Use two different ways to define Series specs to test them.
     """
     dt_range = pd.date_range(
-        data_start, data_start + timedelta(hours=data_range_in_hours), closed="left", freq="1H"
+        data_start,
+        data_start + timedelta(hours=data_range_in_hours),
+        closed="left",
+        freq="1H",
     )
     reg_range = pd.date_range(
-        data_start, data_start + timedelta(hours=data_range_in_hours) + timedelta(days=1), closed="left", freq="1H"
+        data_start,
+        data_start + timedelta(hours=data_range_in_hours) + timedelta(days=1),
+        closed="left",
+        freq="1H",
     )  # 1 additional day of regressor data is available
     outcome_values = [0]
     regressor_values = [5]

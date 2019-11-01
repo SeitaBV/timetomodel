@@ -67,9 +67,7 @@ def timedelta_fits_into(short_td, long_td):
 
 
 def get_feature_window(
-    start: datetime,
-    end: datetime,
-    lags: List[timedelta],
+    start: datetime, end: datetime, lags: List[timedelta]
 ) -> Tuple[datetime, datetime]:
     """Determine the time window for the given feature's lags."""
     if not lags:
