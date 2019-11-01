@@ -24,15 +24,19 @@ def create_dummy_model_state(
     Use two different ways to define Series specs to test them.
     """
     dt_range = pd.date_range(
-        data_start, data_start + timedelta(hours=data_range_in_hours), freq="1H"
+        data_start, data_start + timedelta(hours=data_range_in_hours), closed="left", freq="1H"
     )
+    reg_range = pd.date_range(
+        data_start, data_start + timedelta(hours=data_range_in_hours) + timedelta(days=1), closed="left", freq="1H"
+    )  # 1 additional day of regressor data is available
     outcome_values = [0]
     regressor_values = [5]
     for i in range(1, len(dt_range)):
         outcome_values.append(outcome_values[i - 1] + 1)
+    for i in range(1, len(reg_range)):
         regressor_values.append(5)
     outcome_series = pd.Series(index=dt_range, data=outcome_values)
-    regressor_series = pd.Series(index=dt_range, data=regressor_values)
+    regressor_series = pd.Series(index=reg_range, data=regressor_values)
     specs = modelling.ModelSpecs(
         outcome_var=speccing.ObjectSeriesSpecs(
             outcome_series,
@@ -40,13 +44,13 @@ def create_dummy_model_state(
             feature_transformation=outcome_feature_transformation,
         ),
         model=OLS,
-        lags=[1, 2],
+        lags=[2, 3],  # lags of interest are 2 and 3 hours (we'll ignore the last hour)
         frequency=timedelta(hours=1),
-        horizon=timedelta(minutes=120),
+        horizon=timedelta(minutes=240),
         remodel_frequency=timedelta(hours=48),
         regressors=[regressor_series],
         start_of_training=data_start
-        + timedelta(hours=2),  # leaving room for NaN in lags
+        + timedelta(hours=3),  # leaving room for NaN in lags
         end_of_testing=data_start + timedelta(hours=int(data_range_in_hours / 3)),
     )
     return modelling.ModelState(
