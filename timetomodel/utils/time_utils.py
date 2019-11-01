@@ -73,4 +73,4 @@ def get_feature_window(
     if not lags:
         return start, end
     else:
-        return start - max(lags), end - max(lags)
+        return start - max(lags), end - min(lags)
