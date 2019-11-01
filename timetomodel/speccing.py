@@ -97,7 +97,7 @@ class SeriesSpecs(object):
         self,
         expected_frequency: timedelta,
         transform_features: bool = False,
-        check_time_window: Optional[Tuple[datetime, datetime]] = None,
+        check_datetime_index_window: Optional[Tuple[datetime, datetime]] = None,
     ) -> pd.Series:
         """Load the series data, check compatibility of series data with model specs
            and perform feature transformation, if needed.
@@ -119,7 +119,7 @@ class SeriesSpecs(object):
            `interpolation_config={"method": "time", "limit": 1}`
 
            You can check if a time window would be feasible, i.e. if enough data is loaded, and get suggestions.
-           Be sure to pass datetimes with tzinfo compatible to your data.
+           The time window is a tuple stating the index of the first and the index of the last data point.
         """
         data = self._load_series().sort_index()
 
@@ -147,17 +147,17 @@ class SeriesSpecs(object):
             )
 
         # check if we have enough data for the expected time window
-        if check_time_window is not None:
+        if check_datetime_index_window is not None:
             error_msg = ""
-            if data.index[0] > check_time_window[0]:
+            if data.index[0] > check_datetime_index_window[0]:
                 error_msg += (
-                    "Data starts too late (at %s), while we need data from %s"
-                    % (data.index[0], check_time_window[0])
+                    "Data for %s starts too late (at %s), while we need data from %s "
+                    % (self.name, data.index[0], check_datetime_index_window[0].astimezone(data.index[0].tzinfo))
                 )
-            if data.index[-1] < check_time_window[1]:
+            if data.index[-1] < check_datetime_index_window[1]:
                 error_msg += (
-                    "Data ends too early (at %s), while we need data until %s"
-                    % (data.index[-1], check_time_window[1])
+                    "Data for %s ends too early (at %s), while we need data until %s "
+                    % (self.name, data.index[-1], check_datetime_index_window[1].astimezone(data.index[-1].tzinfo))
                 )
             if error_msg:
                 raise MissingData(error_msg)
