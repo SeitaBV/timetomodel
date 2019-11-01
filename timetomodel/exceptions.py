@@ -8,13 +8,13 @@ class IncompatibleModelSpecs(Exception):
 
 
 class MissingData(Exception):
-    """Data is missing where they needs to be some."""
+    """Data is missing where there needs to be some."""
 
     pass
 
 
 class NaNData(Exception):
-    """Data is NaN where they needs to be some."""
+    """Data is NaN where there needs to be some."""
 
     pass
 

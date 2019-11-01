@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 from datetime import datetime, timedelta
 
 import pytz
@@ -64,3 +64,13 @@ def round_datetime(dt, by_seconds=60):
 def timedelta_fits_into(short_td, long_td):
     """Return true if multiple short timedeltas fit exactly into long timedelta"""
     return long_td.total_seconds() % short_td.total_seconds() == 0
+
+
+def get_feature_window(
+    start: datetime, end: datetime, lags: List[timedelta]
+) -> Tuple[datetime, datetime]:
+    """Determine the time window for the given feature's lags."""
+    if not lags:
+        return start, end
+    else:
+        return start - max(lags), end - min(lags)

@@ -10,6 +10,7 @@ import pytz
 
 from timetomodel.speccing import ModelSpecs
 from timetomodel.utils.time_utils import (
+    get_feature_window,
     timedelta_to_pandas_freq_str,
     round_datetime,
     timedelta_fits_into,
@@ -31,21 +32,35 @@ def construct_features(
     which is useful when we are predicting said step) but usually you’d say “train” or “test” to let the model specs
     determine the time steps.
     """
-    df = pd.DataFrame()
-    datetime_indices = get_time_steps(time_range, specs)
+    datetime_indices = get_time_steps(
+        time_range, specs
+    )  # all datetime indices of data within the given time range
+    df = pd.DataFrame(index=datetime_indices)
+
+    # Determine the start and end indices for the features we'll load, taking into account lags
+    outcome_var_window = get_feature_window(
+        datetime_indices[0],
+        datetime_indices[-1],
+        [specs.frequency * l for l in specs.lags],
+    )
+    regressor_window = get_feature_window(
+        datetime_indices[0], datetime_indices[-1], []
+    )  # regressors have no lags, todo: always the case?
 
     # load raw data series for the outcome data and regressors
-    df[specs.outcome_var.name] = specs.outcome_var.load_series(
+    outcome_var_df = specs.outcome_var.load_series(
         expected_frequency=specs.frequency,
         transform_features=True,
-        check_time_window=(datetime_indices[0], datetime_indices[-1]),
-    )
+        check_datetime_index_window=(outcome_var_window[0], outcome_var_window[1]),
+    ).rename(specs.outcome_var.name)
+    df = pd.concat([df, outcome_var_df], axis=1)
     for reg_spec in specs.regressors:
-        df[reg_spec.name] = reg_spec.load_series(
+        reg_df = reg_spec.load_series(
             expected_frequency=specs.frequency,
             transform_features=True,
-            check_time_window=(datetime_indices[0], datetime_indices[-1]),
-        )
+            check_datetime_index_window=(regressor_window[0], regressor_window[1]),
+        ).rename(reg_spec.name)
+        df = pd.concat([df, reg_df], axis=1)
 
     # add lags on the outcome var
     df = add_lags(df, specs.outcome_var.name, specs.lags)
