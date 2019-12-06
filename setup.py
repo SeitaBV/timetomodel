@@ -5,8 +5,9 @@ setup(
     description="Sane handling of time series data for forecast modelling - with production usage in mind.",
     author="Seita BV",
     author_email="nicolas@seita.nl",
+    url="https://github.com/seitabv/timetomodel",
     keywords=["time series", "forecasting"],
-    version="0.6.4",
+    version="0.6.5",
     install_requires=[
         "pandas",
         "statsmodels",
