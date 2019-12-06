@@ -483,9 +483,9 @@ class ModelSpecs(object):
     def __init__(
         self,
         outcome_var: Union[SeriesSpecs, pd.Series],
-        model: Union[
-            Type, Tuple[Type, dict]
-        ],  # Model class and optionally initialization parameters
+        model: Optional[
+            Union[Type, Tuple[Type, dict]]
+        ],  # Model class and optionally initialization parameters, can be set later with set_model
         start_of_training: datetime,
         end_of_testing: datetime,
         frequency: timedelta,
@@ -499,8 +499,8 @@ class ModelSpecs(object):
     ):
         """Create a ModelSpecs instance."""
         self.outcome_var = parse_series_specs(outcome_var, "y")
-        self.model_type = model[0] if isinstance(model, tuple) else model
-        self.model_params = model[1] if isinstance(model, tuple) else {}
+        if model is not None:
+            self.set_model(model)
         self.frequency = frequency
         self.horizon = horizon
         self.lags = lags
@@ -537,6 +537,14 @@ class ModelSpecs(object):
 
     def __repr__(self):
         return "ModelSpecs: <%s>" % pformat(vars(self))
+
+    def set_model(self, model: Union[Type, Tuple[Type, dict]]):
+        """
+        Set the model. Model is a fittable model class, or a tuple of a model class
+        and a dict of mode parameters.
+        """
+        self.model_type = model[0] if isinstance(model, tuple) else model
+        self.model_params = model[1] if isinstance(model, tuple) else {}
 
 
 def parse_series_specs(
