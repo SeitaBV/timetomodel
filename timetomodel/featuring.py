@@ -175,7 +175,9 @@ def lag_to_suffix(lag: int) -> str:
     return str_lag
 
 
-def add_lags(df: pd.DataFrame, column: str, lags: List[int], frequency: timedelta) -> Optional[pd.DataFrame]:
+def add_lags(
+    df: pd.DataFrame, column: str, lags: List[int], frequency: timedelta
+) -> Optional[pd.DataFrame]:
     """
     Creates lag columns for a column in the dataframe. Lags are in fifteen minute steps (15T).
     Positive values are lags, while negative values are future values.

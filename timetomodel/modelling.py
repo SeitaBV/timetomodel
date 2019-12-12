@@ -48,8 +48,10 @@ def create_fitted_model(
         fitted_model = model.fit(X=x_train, y=y_train)
         fitted_model.params = fitted_model.get_params
     else:
-        raise UnsupportedModel("Not sure which library your model is based on: %s."\
-                               " See ModelSpecs.set_model." % specs.model_type)
+        raise UnsupportedModel(
+            "Not sure which library your model is based on: %s."
+            " See ModelSpecs.set_model." % specs.model_type
+        )
 
     return fitted_model
 

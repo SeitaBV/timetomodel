@@ -539,7 +539,9 @@ class ModelSpecs(object):
     def __repr__(self):
         return "ModelSpecs: <%s>" % pformat(vars(self))
 
-    def set_model(self, model: Union[Type, Tuple[Type, dict]], library_name: Optional[str] = None):
+    def set_model(
+        self, model: Union[Type, Tuple[Type, dict]], library_name: Optional[str] = None
+    ):
         """
         Set the model. Model is a fittable model class, or a tuple of a model class
         and a dict of mode parameters.
@@ -548,16 +550,17 @@ class ModelSpecs(object):
         """
         self.model_type = model[0] if isinstance(model, tuple) else model
         self.model_params = model[1] if isinstance(model, tuple) else {}
-        
+
         known_libraries = ["sklearn", "statsmodels"]
         if library_name is None:
             # guess from class path
             library_name = self.model_type.__module__.split(".")[0]
         if library_name not in (known_libraries):
-            raise UnknownModelException("Library name is '%s',"\
-                                        " but should be one out of %s!"\
-                                        " Set it via ModelSpecs.set_model."
-                                        % (library_name, known_libraries))
+            raise UnknownModelException(
+                "Library name is '%s',"
+                " but should be one out of %s!"
+                " Set it via ModelSpecs.set_model." % (library_name, known_libraries)
+            )
         self.library_name = library_name
 
 
