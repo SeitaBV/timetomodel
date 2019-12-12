@@ -465,6 +465,7 @@ class ModelSpecs(object):
     outcome_var: SeriesSpecs
     model_type: Type  # e.g. statsmodels.api.OLS, sklearn.linear_model.LinearRegression, ...
     model_params: dict
+    library_name: str
     frequency: timedelta
     horizon: timedelta
     lags: List[int]
@@ -538,13 +539,26 @@ class ModelSpecs(object):
     def __repr__(self):
         return "ModelSpecs: <%s>" % pformat(vars(self))
 
-    def set_model(self, model: Union[Type, Tuple[Type, dict]]):
+    def set_model(self, model: Union[Type, Tuple[Type, dict]], library_name: Optional[str] = None):
         """
         Set the model. Model is a fittable model class, or a tuple of a model class
         and a dict of mode parameters.
+        This function has the extra feature to set the library name (useful for instance
+        when your model is custom, based on either statsmodels or sklearn.
         """
         self.model_type = model[0] if isinstance(model, tuple) else model
         self.model_params = model[1] if isinstance(model, tuple) else {}
+        
+        known_libraries = ["sklearn", "statsmodels"]
+        if library_name is None:
+            # guess from class path
+            library_name = self.model_type.__module__.split(".")[0]
+        if library_name not in (known_libraries):
+            raise UnknownModelException("Library name is '%s',"\
+                                        " but should be one out of %s!"\
+                                        " Set it via ModelSpecs.set_model."
+                                        % (library_name, known_libraries))
+        self.library_name = library_name
 
 
 def parse_series_specs(
