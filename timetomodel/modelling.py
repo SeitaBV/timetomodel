@@ -39,17 +39,19 @@ def create_fitted_model(
     x_train = regression_frame.drop(columns=[specs.outcome_var.name])
     y_train = regression_frame[specs.outcome_var.name]
 
-    package_str = specs.model_type.__module__.split(".")[0]
-    if package_str == "statsmodels":
+    if specs.library_name == "statsmodels":
         model = specs.model_type(y_train, x_train, **specs.model_params)
         fitted_model = model.fit()
         fitted_model.get_params = fitted_model.params
-    elif package_str == "sklearn":
+    elif specs.library_name == "sklearn":
         model = specs.model_type(**specs.model_params)
         fitted_model = model.fit(X=x_train, y=y_train)
         fitted_model.params = fitted_model.get_params
     else:
-        raise UnsupportedModel("Unknown model type: %s " % specs.model_type)
+        raise UnsupportedModel(
+            "Not sure which library your model is based on: %s."
+            " See ModelSpecs.set_model." % specs.model_type
+        )
 
     return fitted_model
 

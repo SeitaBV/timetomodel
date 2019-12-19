@@ -7,9 +7,9 @@
 
 Time series forecasting is a modern data science & engineering challenge.
 
-We noticed that these two worlds, data science and engineering of time series forecasting, are not very compatible and often, work from the data scientist has to be re-implemented by engineers. 
+We noticed that these two worlds, data science and engineering of time series forecasting, are not very compatible. Often, work from the data scientist has to be re-implemented by engineers to be used in production. 
 
-`timetomodel` was made to change that. It describes the data treatment of a model, and also automates common data treatment tasks like building train and test data.
+`timetomodel` was created to change that. It describes the data treatment of a model, and also automates common data treatment tasks like building data for training and testing.
 
 As a *data scientist*, experiment with a model in your notebook. Load data from static files (e.g. CSV) and try out lags, regressors and so on. Compare plots and mean square errors of the models you developed.
 
