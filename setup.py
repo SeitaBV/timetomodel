@@ -7,7 +7,7 @@ setup(
     author_email="nicolas@seita.nl",
     url="https://github.com/seitabv/timetomodel",
     keywords=["time series", "forecasting"],
-    version="0.6.6",
+    version="0.6.7",
     install_requires=[
         "pandas",
         "statsmodels",
