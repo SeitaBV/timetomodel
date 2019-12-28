@@ -1,12 +1,13 @@
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
 
 import pandas as pd
+import pytest
 import pytz
+from statsmodels.tools.sm_exceptions import MissingDataError
 
 from timetomodel import forecasting
 from timetomodel.tests import utils as test_utils
-
 
 """
 Test the forecasting functionality. As we need models and feature frames as well, these tests work well
@@ -105,3 +106,17 @@ def test_rolling_forecast_with_refitting(caplog):
         expected_log_times.append(max(expected_log_times) + remodel_frequency_in_hours)
     assert len(refitting_logs) == len([elt for elt in expected_log_times if elt >= 70])
     assert model is not final_model_state.model
+
+
+def test_missing_data_warning(caplog):
+
+    caplog.set_level(logging.WARNING, logger="timetomodel.forecasting")
+    with pytest.raises(MissingDataError):
+        test_utils.create_dummy_model_state(
+            DATA_START,
+            data_range_in_hours=24,
+            regressor_feature_transformation=test_utils.MyNanIntroducingTransformation(),
+        )
+
+    missing_data_logs = [log for log in caplog.records if "missing data" in log.message]
+    assert len(missing_data_logs) == 1

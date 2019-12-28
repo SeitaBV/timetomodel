@@ -1,5 +1,4 @@
-from datetime import date, timedelta
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Query
 

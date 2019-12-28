@@ -1,5 +1,6 @@
 """
 Create or import top-level classes/methods.
+isort:skip_file
 """
 from typing import Tuple, Union
 
@@ -18,10 +19,10 @@ MODEL_TYPES = Union[MODEL_CLASSES]
 
 # First public import block
 from timetomodel.speccing import (
+    DBSeriesSpecs,
+    DFFileSeriesSpecs,
     ModelSpecs,
     ObjectSeriesSpecs,
-    DFFileSeriesSpecs,
-    DBSeriesSpecs,
 )
 
 
@@ -55,10 +56,10 @@ class ModelState(object):
         return "ModelState: <%s, %s>" % (self.model, self.specs)
 
 
-# second public import block
+# Second public import block
+from timetomodel.forecasting import make_forecast_for, make_rolling_forecasts
 from timetomodel.modelling import (
     create_fitted_model,
     evaluate_models,
     model_param_grid_search,
 )
-from timetomodel.forecasting import make_forecast_for, make_rolling_forecasts

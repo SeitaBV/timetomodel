@@ -2,13 +2,10 @@ from datetime import datetime, timedelta
 
 import pytz
 
-from timetomodel.utils.time_utils import (
-    round_datetime,
-    timedelta_fits_into,
-    timedelta_to_pandas_freq_str,
-    get_closest_quarter,
-    get_most_recent_quarter,
-)
+from timetomodel.utils.time_utils import (get_closest_quarter,
+                                          get_most_recent_quarter,
+                                          round_datetime, timedelta_fits_into,
+                                          timedelta_to_pandas_freq_str)
 
 
 def test_find_quarter():

@@ -1,20 +1,23 @@
-from typing import Dict, Tuple, Optional, Sequence
+import logging
 from datetime import datetime
+from typing import Dict, Optional, Sequence, Tuple
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 import statsmodels.api as sm
 from matplotlib import pyplot as plt
 
-from timetomodel.speccing import ModelSpecs
-from timetomodel.featuring import construct_features
-from timetomodel.exceptions import MissingData, UnsupportedModel
 from timetomodel import MODEL_TYPES, ModelState
-
+from timetomodel.exceptions import UnsupportedModel
+from timetomodel.featuring import construct_features
+from timetomodel.speccing import ModelSpecs
 
 """
 Functions for working with time series models.
 """
+
+
+logger = logging.getLogger(__name__)
 
 
 def create_fitted_model(
@@ -27,20 +30,6 @@ def create_fitted_model(
     """
     if regression_frame is None:
         regression_frame = construct_features(time_range="train", specs=specs)
-
-    # Remove any observation where data for any of the features is missing.
-    # Other parts of the workflow cannot handle missing data, so everything should be verified here.
-    regression_frame.loc[
-        :, regression_frame.columns != specs.outcome_var.name
-    ] = regression_frame.loc[
-        :, regression_frame.columns != specs.outcome_var.name
-    ].dropna(
-        axis=1
-    )
-    if regression_frame.empty:
-        raise MissingData(
-            "Missing data (probably one of the regressors contains no data)"
-        )
 
     x_train = regression_frame.drop(columns=[specs.outcome_var.name])
     y_train = regression_frame[specs.outcome_var.name]

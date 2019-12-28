@@ -1,26 +1,24 @@
-from typing import List, Optional, Tuple, Type, Union, Dict, Any
-from datetime import datetime, timedelta, tzinfo
-from pprint import pformat
+import inspect
+import logging
 import os
 import warnings
-import logging
-import inspect
+from datetime import datetime, timedelta, tzinfo
+from pprint import pformat
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
-import pytz
 import numpy as np
 import pandas as pd
+import pytz
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Query
-from sqlalchemy.dialects import postgresql
 
+from timetomodel.exceptions import IncompatibleModelSpecs, MissingData, NaNData
+from timetomodel.transforming import ReversibleTransformation, Transformation
 from timetomodel.utils.debug_utils import render_query
-from timetomodel.utils.time_utils import (
-    tz_aware_utc_now,
-    timedelta_to_pandas_freq_str,
-    timedelta_fits_into,
-)
-from timetomodel.exceptions import IncompatibleModelSpecs, NaNData, MissingData
-from timetomodel.transforming import Transformation, ReversibleTransformation
+from timetomodel.utils.time_utils import (timedelta_fits_into,
+                                          timedelta_to_pandas_freq_str,
+                                          tz_aware_utc_now)
 
 """
 Specs for the context of your model and how to treat your model data.
