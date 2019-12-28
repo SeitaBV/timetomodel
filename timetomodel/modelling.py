@@ -28,9 +28,15 @@ def create_fitted_model(
     if regression_frame is None:
         regression_frame = construct_features(time_range="train", specs=specs)
 
-    # Remove any observation where data is missing.
+    # Remove any observation where data for any of the features is missing.
     # Other parts of the workflow cannot handle missing data, so everything should be verified here.
-    regression_frame = regression_frame.dropna(axis=1)
+    regression_frame.loc[
+        :, regression_frame.columns != specs.outcome_var.name
+    ] = regression_frame.loc[
+        :, regression_frame.columns != specs.outcome_var.name
+    ].dropna(
+        axis=1
+    )
     if regression_frame.empty:
         raise MissingData(
             "Missing data (probably one of the regressors contains no data)"

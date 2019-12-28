@@ -201,7 +201,7 @@ def add_lags(
         pd.date_range(
             start=df_start.astimezone(pytz.utc),
             end=df_end.astimezone(pytz.utc),
-            freq=df.index.freq,
+            freq=timedelta_to_pandas_freq_str(frequency),
         )
     )
 
