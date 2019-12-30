@@ -1,14 +1,14 @@
 from datetime import datetime, timedelta
 
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
 import pytz
 
-from timetomodel.speccing import ObjectSeriesSpecs, CSVFileSeriesSpecs
-from timetomodel.transforming import Transformation
+from timetomodel.exceptions import IncompatibleModelSpecs, MissingData, NaNData
+from timetomodel.speccing import CSVFileSeriesSpecs, ObjectSeriesSpecs
 from timetomodel.tests.utils import MyMultiplicationTransformation
-from timetomodel.exceptions import MissingData, NaNData, IncompatibleModelSpecs
+from timetomodel.transforming import Transformation
 
 
 def test_load_series_without_datetime_index():

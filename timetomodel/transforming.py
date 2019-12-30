@@ -1,8 +1,7 @@
 import logging
 
-import pandas as pd
 import numpy as np
-
+import pandas as pd
 from statsmodels.base.transform import BoxCox
 
 """

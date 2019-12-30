@@ -1,22 +1,17 @@
 """
 functionality to create the feature data necessary.
 """
-from typing import List, Optional, Union, Tuple
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
+from typing import List, Optional, Tuple, Union
 
 import pandas as pd
 import pytz
 
 from timetomodel.speccing import ModelSpecs
-from timetomodel.utils.time_utils import (
-    get_feature_window,
-    timedelta_to_pandas_freq_str,
-    round_datetime,
-    timedelta_fits_into,
-)
-from timetomodel.exceptions import NaNData
-
+from timetomodel.utils.time_utils import (get_feature_window, round_datetime,
+                                          timedelta_fits_into,
+                                          timedelta_to_pandas_freq_str)
 
 logger = logging.getLogger(__name__)
 
@@ -78,16 +73,12 @@ def construct_features(
     )
     df = df[relevant_columns].reindex(datetime_indices)
 
-    # Check for nan values in lagged and regressor data
-    if df.drop(specs.outcome_var.name, axis=1).isnull().values.any():
-        raise NaNData(
-            "I found nan values in the feature frame I just constructed and I obviously can't"
-            " make forecasts lacking data. Here's how many I found:\n\n%s\n\n"
-            % df.drop(specs.outcome_var.name, axis=1).isnull().sum()
+    # Warn about how many observations are missing data for at least one of the features (check for nan values in lagged and regressor data).
+    df_nan_features = df.drop(specs.outcome_var.name, axis=1).isna()
+    if df_nan_features.values.any():
+        logger.warning(
+            f"{df_nan_features.any(axis=1).sum()} out of {df.shape[0]} observations have missing data for at least one of the features. Here's how many I found per feature:\n\n{df_nan_features.sum()}\n\n"
         )
-
-    # if specs.model_type == "OLS":
-    #    df = sm.add_constant(df)
 
     return df
 
@@ -201,7 +192,7 @@ def add_lags(
         pd.date_range(
             start=df_start.astimezone(pytz.utc),
             end=df_end.astimezone(pytz.utc),
-            freq=df.index.freq,
+            freq=timedelta_to_pandas_freq_str(frequency),
         )
     )
 

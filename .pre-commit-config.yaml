@@ -17,4 +17,4 @@ repos:
   rev: v4.3.4
   hooks:
   - id: isort
-    args: ['--silent-overwrite']
+    args: ['--apply']

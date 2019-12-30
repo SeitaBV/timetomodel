@@ -1,15 +1,14 @@
-from typing import Tuple
-from datetime import datetime
 import logging
+from datetime import datetime
+from typing import Tuple
 
 import pandas as pd
 import pytz
 
-from timetomodel import MODEL_CLASSES, ModelState, ModelSpecs
-from timetomodel.modelling import create_fitted_model
+from timetomodel import MODEL_CLASSES, ModelSpecs, ModelState
 from timetomodel.featuring import construct_features, get_time_steps
+from timetomodel.modelling import create_fitted_model
 from timetomodel.utils.time_utils import timedelta_to_pandas_freq_str
-
 
 """
 Functionality for making predictions per time slot.

@@ -7,7 +7,7 @@ setup(
     author_email="nicolas@seita.nl",
     url="https://github.com/seitabv/timetomodel",
     keywords=["time series", "forecasting"],
-    version="0.6.6",
+    version="0.6.7",
     install_requires=[
         "pandas",
         "statsmodels",
@@ -134,5 +134,5 @@ Here is an example where we describe a solar time series problem, and use ``stat
     # model_state might have re-trained a new model automatically, by honoring the remodel_frequency
 
     """,
-    long_description_content_type="text/markdown"
+    long_description_content_type="text/markdown",
 )

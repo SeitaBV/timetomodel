@@ -1,13 +1,12 @@
-from typing import Optional
-from datetime import datetime, timedelta
 import logging
+from datetime import datetime, timedelta
+from typing import Optional
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 from statsmodels.api import OLS
 
-from timetomodel import speccing, modelling, transforming
-
+from timetomodel import modelling, speccing, transforming
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +15,9 @@ def create_dummy_model_state(
     data_start: datetime,
     data_range_in_hours: int,
     outcome_feature_transformation: Optional[
+        transforming.ReversibleTransformation
+    ] = None,
+    regressor_feature_transformation: Optional[
         transforming.ReversibleTransformation
     ] = None,
 ) -> modelling.ModelState:
@@ -54,7 +56,13 @@ def create_dummy_model_state(
         frequency=timedelta(hours=1),
         horizon=timedelta(minutes=240),
         remodel_frequency=timedelta(hours=48),
-        regressors=[regressor_series],
+        regressors=[
+            speccing.ObjectSeriesSpecs(
+                regressor_series,
+                "my_regressor",
+                feature_transformation=regressor_feature_transformation,
+            )
+        ],
         start_of_training=data_start
         + timedelta(hours=3),  # leaving room for NaN in lags
         end_of_testing=data_start + timedelta(hours=int(data_range_in_hours / 3)),
@@ -90,3 +98,12 @@ class MyMultiplicationTransformation(transforming.ReversibleTransformation):
 
     def back_transform_value(self, y: np.array):
         return y / self.params.factor
+
+
+class MyNanIntroducingTransformation(transforming.ReversibleTransformation):
+    def transform_series(self, x: pd.Series) -> pd.Series:
+        x.iloc[5] = np.nan
+        return x
+
+    def back_transform_value(self, y: np.array) -> np.array:
+        return y
