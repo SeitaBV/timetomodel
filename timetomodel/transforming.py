@@ -95,7 +95,7 @@ class BoxCoxTransformation(ReversibleTransformation):
         self._set_params(**params)
         return pd.Series(index=orig_index, data=y)
 
-    def back_transform_value(self, x):
+    def back_transform_value(self, x: float):
         try:
             y = (
                 BoxCox.untransform_boxcox(BoxCox(), x, lmbda=self.params.lambda1)
