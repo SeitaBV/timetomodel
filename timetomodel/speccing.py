@@ -13,12 +13,20 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Query
 
-from timetomodel.exceptions import IncompatibleModelSpecs, MissingData, NaNData
+from timetomodel import MODEL_CLASSES
+from timetomodel.exceptions import (
+    IncompatibleModelSpecs,
+    MissingData,
+    NaNData,
+    UnsupportedModel,
+)
 from timetomodel.transforming import ReversibleTransformation, Transformation
 from timetomodel.utils.debug_utils import render_query
-from timetomodel.utils.time_utils import (timedelta_fits_into,
-                                          timedelta_to_pandas_freq_str,
-                                          tz_aware_utc_now)
+from timetomodel.utils.time_utils import (
+    timedelta_fits_into,
+    timedelta_to_pandas_freq_str,
+    tz_aware_utc_now,
+)
 
 """
 Specs for the context of your model and how to treat your model data.
@@ -549,12 +557,12 @@ class ModelSpecs(object):
         self.model_type = model[0] if isinstance(model, tuple) else model
         self.model_params = model[1] if isinstance(model, tuple) else {}
 
-        known_libraries = ["sklearn", "statsmodels"]
+        known_libraries = [m.__module__.split(".")[0] for m in MODEL_CLASSES]
         if library_name is None:
             # guess from class path
             library_name = self.model_type.__module__.split(".")[0]
-        if library_name not in (known_libraries):
-            raise UnknownModelException(
+        if library_name not in known_libraries:
+            raise UnsupportedModel(
                 "Library name is '%s',"
                 " but should be one out of %s!"
                 " Set it via ModelSpecs.set_model." % (library_name, known_libraries)
