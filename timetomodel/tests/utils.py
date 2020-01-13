@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 def create_dummy_model_state(
     data_start: datetime,
     data_range_in_hours: int,
+    lags: List[int] = (2, 3),  # default lags of interest are 2 and 3 hours (we'll ignore the last hour)
+    training_and_testing_period: timedelta = timedelta(hours=8),
     outcome_feature_transformation: Optional[
         transforming.ReversibleTransformation
     ] = None,
@@ -52,7 +54,7 @@ def create_dummy_model_state(
             feature_transformation=outcome_feature_transformation,
         ),
         model=OLS,
-        lags=[2, 3],  # lags of interest are 2 and 3 hours (we'll ignore the last hour)
+        lags=lags,
         frequency=timedelta(hours=1),
         horizon=timedelta(minutes=240),
         remodel_frequency=timedelta(hours=48),
@@ -64,8 +66,8 @@ def create_dummy_model_state(
             )
         ],
         start_of_training=data_start
-        + timedelta(hours=3),  # leaving room for NaN in lags
-        end_of_testing=data_start + timedelta(hours=int(data_range_in_hours / 3)),
+        + timedelta(hours=max(lags)),  # leaving room for lags
+        end_of_testing=data_start + timedelta(hours=max(lags)) + training_and_testing_period,
     )
     return modelling.ModelState(
         modelling.create_fitted_model(specs, version="0.1"), specs

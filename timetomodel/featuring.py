@@ -108,8 +108,8 @@ def get_time_steps(
         or (isinstance(time_range, str) and time_range in ("train", "test"))
     ):
         raise Exception(
-            "Goal for DateTimeIndex construction needs to be either a string ('train', 'test'),"
-            "a tuple of two datetime objects or one datetime object."
+            f"Goal for DateTimeIndex construction needs to be either a string ('train', 'test'),"
+            f"a tuple of two datetime objects or one datetime object. I got {type(time_range)}"
         )
 
     pd_frequency = timedelta_to_pandas_freq_str(specs.frequency)
@@ -127,32 +127,17 @@ def get_time_steps(
             time_range[0], time_range[1], closed="left", freq=pd_frequency
         )
 
-    # special cases: "train" or "test" - we have to calculate from model specs
-    length_of_data = specs.end_of_testing - specs.start_of_training
+    # special cases: "train" or "test" - we get them from model specs
     if time_range == "train":
-        end_of_training = (
-            specs.start_of_training + length_of_data * specs.ratio_training_testing_data
-        )
-        end_of_training = round_datetime(
-            end_of_training, specs.frequency.total_seconds()
-        )
         logger.debug("Start of training: %s" % specs.start_of_training)
-        logger.debug("End of training: %s" % end_of_training)
-        return pd.date_range(
-            specs.start_of_training, end_of_training, freq=pd_frequency
-        )
+        logger.debug(f"End of training: {specs.end_of_training}")
+        return pd.date_range(specs.start_of_training, specs.end_of_training, freq=pd_frequency, closed="left")
     elif time_range == "test":
-        start_of_testing = (
-            specs.start_of_training
-            + (length_of_data * specs.ratio_training_testing_data)
-            + specs.frequency
-        )
-        start_of_testing = round_datetime(
-            start_of_testing, specs.frequency.total_seconds()
-        )
-        logger.debug("Start of testing: %s" % start_of_testing)
+        logger.debug("Start of testing: %s" % specs.start_of_testing)
         logger.debug("End of testing: %s" % specs.end_of_testing)
-        return pd.date_range(start_of_testing, specs.end_of_testing, freq=pd_frequency)
+        return pd.date_range(specs.start_of_testing, specs.end_of_testing, freq=pd_frequency, closed="left")
+    else:
+        raise ValueError(f"{time_range} is not a valid time range.")
 
 
 def lag_to_suffix(lag: int) -> str:

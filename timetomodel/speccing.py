@@ -23,6 +23,7 @@ from timetomodel.exceptions import (
 from timetomodel.transforming import ReversibleTransformation, Transformation
 from timetomodel.utils.debug_utils import render_query
 from timetomodel.utils.time_utils import (
+    round_datetime,
     timedelta_fits_into,
     timedelta_to_pandas_freq_str,
     tz_aware_utc_now,
@@ -478,10 +479,14 @@ class ModelSpecs(object):
     regressors: List[SeriesSpecs]
     # Start of training data set
     start_of_training: datetime
+    # End of training data set
+    end_of_training: datetime
+    # Start of testing data set
+    start_of_testing: datetime
     # End of testing data set
     end_of_testing: datetime
     # This determines the cutoff point between training and testing data
-    ratio_training_test_data: float
+    ratio_training_testing_data: float
     # time this model was created, defaults to UTC now
     creation_time: datetime
     model_filename: str
@@ -531,6 +536,16 @@ class ModelSpecs(object):
                 "Training & testing period (%s to %s) does not fit with frequency (%s)"
                 % (self.start_of_training, self.end_of_testing, self.frequency)
             )
+        else:
+            # todo: leave open the possibility of a gap in between training and testing
+            length_of_data = end_of_testing - start_of_training
+            end_of_training = (
+                    start_of_training + length_of_data * self.ratio_training_testing_data
+            )
+            self.end_of_training = round_datetime(
+                end_of_training, self.frequency.total_seconds()
+            )
+            self.start_of_testing = self.end_of_training
 
         if creation_time is None:
             self.creation_time = tz_aware_utc_now()

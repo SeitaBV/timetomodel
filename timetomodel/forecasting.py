@@ -53,6 +53,8 @@ def update_model(
         if current_model is not None:
             # move the model's series specs further in time
             specs.start_of_training = specs.start_of_training + specs.remodel_frequency
+            specs.end_of_training = specs.end_of_training + specs.remodel_frequency
+            specs.start_of_testing = specs.start_of_testing + specs.remodel_frequency
             specs.end_of_testing = specs.end_of_testing + specs.remodel_frequency
         relevant_time_steps = get_time_steps(time_range="train", specs=specs)
         new_model = create_fitted_model(
@@ -97,7 +99,7 @@ def make_rolling_forecasts(
     model = None
     logger.info("Forecasting from %s to %s" % (start, end))
     while time_step < end:
-        model, specs = update_model(
+        model, model_specs = update_model(
             time_step, model, model_specs, feature_frame=feature_frame
         ).split()
         features = feature_frame.loc[time_step:time_step].iloc[:, 1:]
