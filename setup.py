@@ -7,7 +7,7 @@ setup(
     author_email="nicolas@seita.nl",
     url="https://github.com/seitabv/timetomodel",
     keywords=["time series", "forecasting"],
-    version="0.6.7",
+    version="0.6.8",
     install_requires=[
         "pandas",
         "statsmodels",
@@ -37,13 +37,17 @@ setup(
 
 Time series forecasting is a modern data science & engineering challenge.
 
-We noticed that these two worlds, data science and engineering of time series forecasting, are not very compatible. Often, work from the data scientist has to be re-implemented by engineers to be used in production. 
+We noticed that these two worlds, data science and engineering of time series forecasting, are not very compatible.
+Often, work from the data scientist has to be re-implemented by engineers to be used in production.
 
 `timetomodel` was created to change that. It describes the data treatment of a model, and also automates common data treatment tasks like building data for training and testing.
 
-As a *data scientist*, experiment with a model in your notebook. Load data from static files (e.g. CSV) and try out lags, regressors and so on. Compare plots and mean square errors of the models you developed.
+As a *data scientist*, experiment with a model in your notebook.
+Load data from static files (e.g. CSV) and try out lags, regressors and so on.
+Compare plots and mean square errors of the models you developed.
 
-As an *engineer*, take over the model description and use it in your production code. Often, this would entail not much more than changing the data source (e.g from CSV to a column in the database).
+As an *engineer*, take over the model description and use it in your production code.
+Often, this would entail not much more than changing the data source (e.g from CSV to a column in the database).
 
 `timetomodel` is supposed to wrap around any fit/predict type model, e.g. from statsmodels or scikit-learn (some work needed here to ensure support).
 
@@ -78,7 +82,7 @@ Here is an example where we describe a solar time series problem, and use ``stat
 
     data_start = datetime(2015, 3, 1, tzinfo=pytz.utc)
     data_end = datetime(2015, 10, 31, tzinfo=pytz.utc)
-    
+
     #### Solar model - 1h ahead  ####
 
     # spec outcome variable
@@ -114,17 +118,17 @@ Here is an example where we describe a solar time series problem, and use ``stat
     solar_model1h = create_fitted_model(solar_model1h_specs, "Linear Regression Solar Horizon 1h")
     # solar_model_1h is now an OLS model object which can be pickled and re-used.
     # With the solar_model1h_specs in hand, your production code could always re-train a new one,
-    # if the model has become outdated. 
-    
+    # if the model has become outdated.
+
     # For data scientists: evaluate model
     evaluate_models(m1=ModelState(solar_model1h, solar_model1h_specs))
 
 ![Evaluation result](https://raw.githubusercontent.com/SeitaBV/timetomodel/master/img/solar-forecast-evaluation.png)
-    
+
     # For engineers a): Change data sources to use database (hinted)
     solar_model1h_specs.outcome_var = speccing.DBSeriesSpecs(db_engine=..., query=...)
     solar_model1h_specs.regressors[0] = speccing.DBSeriesSpecs(db_engine=..., query=...)
-    
+
     # For engineers b): Use model to make forecasts for an hour
     forecasts, model_state = make_rolling_forecasts(
         start=datetime(2015, 11, 1, tzinfo=pytz.utc),

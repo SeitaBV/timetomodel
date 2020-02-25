@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
+import pandas as pd
 import pytz
 from pandas.tseries.frequencies import to_offset
 
@@ -53,8 +54,10 @@ def naive_utc_from(dt: datetime) -> datetime:
         return dt.astimezone(pytz.utc).replace(tzinfo=None)
 
 
-def round_datetime(dt, by_seconds=60):
-    """Round a datetime by some number of seconds. Can be made nicer by e.g. Pendulum"""
+def round_datetime(dt: Union[datetime, pd.Timestamp], by_seconds=60):
+    """Round a datetime or pandas Timestamp by some number of seconds. Can be made nicer by e.g. Pendulum"""
+    if isinstance(dt, pd.Timestamp):
+        return dt.round(timedelta_to_pandas_freq_str(timedelta(seconds=by_seconds)))
     dt_naive = naive_utc_from(dt)
     seconds = (dt_naive - dt_naive.min).total_seconds()
     rounding = (seconds + by_seconds / 2) // by_seconds * by_seconds

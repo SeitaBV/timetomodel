@@ -1,11 +1,16 @@
 from datetime import datetime, timedelta
 
+import pandas as pd
+import pytest
 import pytz
 
-from timetomodel.utils.time_utils import (get_closest_quarter,
-                                          get_most_recent_quarter,
-                                          round_datetime, timedelta_fits_into,
-                                          timedelta_to_pandas_freq_str)
+from timetomodel.utils.time_utils import (
+    get_closest_quarter,
+    get_most_recent_quarter,
+    round_datetime,
+    timedelta_fits_into,
+    timedelta_to_pandas_freq_str,
+)
 
 
 def test_find_quarter():
@@ -31,16 +36,32 @@ def test_timedelta_to_pd_freq_str():
     assert timedelta_to_pandas_freq_str(timedelta(days=1)) == "D"
 
 
-def test_round_time_by_hour():
-    dt = datetime(2018, 1, 26, 14, 40)
+@pytest.mark.parametrize(
+    "dt",
+    [
+        datetime(2018, 1, 26, 14, 40),
+        datetime(2018, 1, 26, 14, 40, tzinfo=pytz.utc),
+        pd.Timestamp(datetime(2018, 1, 26, 14, 40)),
+        pd.Timestamp(datetime(2018, 1, 26, 14, 40, tzinfo=pytz.utc)),
+    ],
+)
+def test_round_time_by_hour(dt):
     round_to_hour = round_datetime(dt, by_seconds=60 * 60)
     assert round_to_hour.day == dt.day
     assert round_to_hour.hour == 15
     assert round_to_hour.minute == 00
 
 
-def test_round_time_by_15min():
-    dt = datetime(2018, 1, 26, 14, 40)
+@pytest.mark.parametrize(
+    "dt",
+    [
+        datetime(2018, 1, 26, 14, 40),
+        datetime(2018, 1, 26, 14, 40, tzinfo=pytz.utc),
+        pd.Timestamp(datetime(2018, 1, 26, 14, 40)),
+        pd.Timestamp(datetime(2018, 1, 26, 14, 40, tzinfo=pytz.utc)),
+    ],
+)
+def test_round_time_by_15min(dt):
     round_to_hour = round_datetime(dt, by_seconds=60 * 15)
     assert round_to_hour.day == dt.day
     assert round_to_hour.hour == 14
