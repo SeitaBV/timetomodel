@@ -30,7 +30,7 @@ class ModelState(object):
     """
     This class abstracts all information we need to describe a model and how it was made.
     It is simply a container to hold all model-relevant state information:
-    The trained model and the ModelsSpecs it is based on."""
+    The trained model and the ModelSpecs it is based on."""
 
     model: MODEL_TYPES  # a fitted model
     specs: ModelSpecs
