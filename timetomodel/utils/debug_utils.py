@@ -40,7 +40,10 @@ def render_query(statement, dialect=None):
             elif isinstance(value, list):
                 return "'{%s}'" % (
                     ",".join(
-                        [self.render_array_value(x, type_.item_type) for x in value]
+                        [self.render_array_value(
+                            x,
+                            type_.item_type if hasattr(type_, "item_type") else type_
+                        ) for x in value]
                     )
                 )
             return super(LiteralCompiler, self).render_literal_value(value, type_)
