@@ -144,7 +144,7 @@ def test_load_series_with_missing_data():
         name="mydata",
     )
     with pytest.raises(NaNData) as e_info:
-        s.load_series(expected_frequency=timedelta(hours=1))
+        s.load_series(expected_frequency=timedelta(minutes=15))
     assert "Nan values" in str(e_info.value)
 
 

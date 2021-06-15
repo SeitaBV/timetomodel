@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Query
 
-from timetomodel.exceptions import IncompatibleModelSpecs, MissingData, NaNData
+from timetomodel.exceptions import IncompatibleModelSpecs, MissingData, NaNData, UnsupportedModel
 from timetomodel.transforming import ReversibleTransformation, Transformation
 from timetomodel.utils.debug_utils import render_query
 from timetomodel.utils.time_utils import (timedelta_fits_into,
@@ -127,6 +127,10 @@ class SeriesSpecs(object):
                 "Loaded series has no DatetimeIndex, but %s" % type(data.index).__name__
             )
 
+        # check if time series frequency is okay, if not then resample, and check again
+        if data.index.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
+            data = self.resample_data(data, expected_frequency)
+
         # make sure we have a time zone (default to UTC), save original time zone
         if data.index.tzinfo is None:
             self.original_tz = pytz.utc
@@ -169,10 +173,6 @@ class SeriesSpecs(object):
                 )
             if error_msg:
                 raise MissingData(error_msg)
-
-        # check if time series frequency is okay, if not then resample, and check again
-        if data.index.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
-            data = self.resample_data(data, expected_frequency)
 
             if data.index.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
                 raise IncompatibleModelSpecs(
@@ -554,7 +554,7 @@ class ModelSpecs(object):
             # guess from class path
             library_name = self.model_type.__module__.split(".")[0]
         if library_name not in (known_libraries):
-            raise UnknownModelException(
+            raise UnsupportedModel(
                 "Library name is '%s',"
                 " but should be one out of %s!"
                 " Set it via ModelSpecs.set_model." % (library_name, known_libraries)

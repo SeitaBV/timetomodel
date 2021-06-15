@@ -19,7 +19,7 @@ class NaNData(Exception):
     pass
 
 
-class UnsupportedModel(Exception):
-    """If a statistic model is not implemented in this tool (yet)."""
+class UnsupportedModel(NotImplementedError):
+    """If the model is not based on one of the libraries (yet) known to timetomodel."""
 
     pass
