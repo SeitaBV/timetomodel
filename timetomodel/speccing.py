@@ -79,6 +79,19 @@ class SeriesSpecs(object):
         resampling_config: Dict[str, Any] = None,
         interpolation_config: Dict[str, Any] = None,
     ):
+
+        # todo: deprecate 'aggregation' key (FutureWarning first introduced in 0.7.0)
+        if resampling_config is not None and "aggregation" in resampling_config.keys():
+            warnings.warn(
+                FutureWarning(
+                    f"The 'aggregation' key is deprecated and will raise KeyError in a future version. To silence this warning, replace {{'aggregation': '{resampling_config['aggregation']}'}} with {{'downsampling_method': '{resampling_config['aggregation']}'}}."
+                )
+            )
+            if not hasattr(resampling_config, "downsampling_method"):
+                resampling_config["downsampling_method"] = resampling_config[
+                    "aggregation"
+                ]
+
         self.name = name
         self.original_tz = original_tz
         self.feature_transformation = feature_transformation
@@ -113,16 +126,17 @@ class SeriesSpecs(object):
         This function resamples data if the frequency is not equal to the expected frequency.
         It is possible to customise this resampling (without that, we aggregate means after default resampling).
         To customize resampling, pass in a `resampling_config` argument when you initialize a SeriesSpecs,
-        with an aggregation method name (e.g. "mean") and kw params which are to be passed into
-        `pandas.Series.resample`. For example:
+        with downsampling_method and upsampling_method names (e.g. "mean" and "pad", respectively)
+        and keyword params which are to be passed into `pandas.Series.resample`.
+        For example:
 
-        `resampling_config={"closed": "left", "aggregation": "sum"}`
+        `resampling_config=dict(closed="left", downsampling_method="sum", upsampling_method="reverse_sum")`
 
-        Similarly, pass in an `interpolation_config` to the class with kw params to pass into
+        Similarly, pass in an `interpolation_config` to the class with keyword params to pass into
         `pandas.Series.interpolate`. For example, to fill gaps of at most 1 consecutive NaN value through
-        interpolation of the time index:
+        interpolation of the time index (note that interpolation happens after resampling):
 
-        `interpolation_config={"method": "time", "limit": 1}`
+        `interpolation_config=dict(method="time", limit=1)`
 
         To be able to upsample, make sure a time_window is set.
         The time window is a tuple stating the index of the first and the index of the last data point.
@@ -252,22 +266,25 @@ class SeriesSpecs(object):
                 **{
                     k: v
                     for k, v in self.resampling_config.items()
-                    if k != "aggregation"
+                    if k != "downsampling_method"
                 },
             )
-            if "aggregation" not in self.resampling_config:
+            if "downsampling_method" not in self.resampling_config:
                 data = data_resampler.mean()
             else:
                 for agg_name, agg_method in inspect.getmembers(
                     data_resampler, inspect.ismethod
                 ):
-                    if self.resampling_config["aggregation"] == agg_name:
+                    if self.resampling_config["downsampling_method"] == agg_name:
                         data = agg_method()
                         break
                 else:
                     raise IncompatibleModelSpecs(
-                        "Cannot find resampling aggregation %s on %s"
-                        % (self.resampling_config["aggregation"], data_resampler)
+                        "Cannot find downsampling method %s on %s"
+                        % (
+                            self.resampling_config["downsampling_method"],
+                            data_resampler,
+                        )
                     )
         return data
 

@@ -100,12 +100,12 @@ def test_load_series_with_non_existing_custom_frequency_resampling():
             data=[1, 2, 3],
         ),
         name="mydata",
-        resampling_config={"aggregation": "GGG"},
+        resampling_config={"downsampling_method": "GGG"},
     )
 
     with pytest.raises(IncompatibleModelSpecs) as e_info:
         s.load_series(expected_frequency=timedelta(hours=1))
-    assert "Cannot find resampling aggregation GGG" in str(e_info.value)
+    assert "Cannot find downsampling method GGG" in str(e_info.value)
 
 
 def test_load_series_with_custom_frequency_resampling():
@@ -116,7 +116,7 @@ def test_load_series_with_custom_frequency_resampling():
             data=[1, 2, 3],
         ),
         name="mydata",
-        resampling_config={"aggregation": "sum"},
+        resampling_config={"downsampling_method": "sum"},
     )
 
     series = s.load_series(expected_frequency=timedelta(hours=1))
