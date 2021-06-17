@@ -93,7 +93,9 @@ def test_rolling_forecast_with_refitting(caplog):
     end = DATA_START + timedelta(hours=190)
     forecasts, final_model_state = forecasting.make_rolling_forecasts(start, end, specs)
     expected_values = specs.outcome_var.load_series(
-        expected_frequency=timedelta(hours=1)
+        time_window=(start, end),
+        expected_frequency=timedelta(hours=1),
+        check_time_window=True,
     ).loc[start:end][:-1]
     for forecast, expected_value in zip(forecasts, expected_values):
         assert abs(forecast - expected_value) < TOLERANCE

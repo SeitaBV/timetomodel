@@ -44,16 +44,18 @@ def construct_features(
 
     # load raw data series for the outcome data and regressors
     outcome_var_df = specs.outcome_var.load_series(
+        time_window=(outcome_var_window[0], outcome_var_window[1]),
         expected_frequency=specs.frequency,
         transform_features=True,
-        check_datetime_index_window=(outcome_var_window[0], outcome_var_window[1]),
+        check_time_window=True,
     ).rename(specs.outcome_var.name)
     df = pd.concat([df, outcome_var_df], axis=1)
     for reg_spec in specs.regressors:
         reg_df = reg_spec.load_series(
+            time_window=(regressor_window[0], regressor_window[1]),
             expected_frequency=specs.frequency,
             transform_features=True,
-            check_datetime_index_window=(regressor_window[0], regressor_window[1]),
+            check_time_window=True,
         ).rename(reg_spec.name)
         df = pd.concat([df, reg_df], axis=1)
 

@@ -28,7 +28,11 @@ def test_load_series():
         name="mydata",
     )
     assert (
-        s.load_series(expected_frequency=timedelta(minutes=15)).loc[
+        s.load_series(
+            time_window=(dt, dt + timedelta(minutes=30)),
+            expected_frequency=timedelta(minutes=15),
+            check_time_window=True,
+        ).loc[
             dt + timedelta(minutes=30)
         ]
         == 3
@@ -46,8 +50,9 @@ def test_load_series_with_expected_time_window():
     )
     assert (
         s.load_series(
+            time_window=(dt, dt + timedelta(minutes=30)),
             expected_frequency=timedelta(minutes=15),
-            check_datetime_index_window=(dt, dt + timedelta(minutes=30)),
+            check_time_window=True,
         ).loc[dt + timedelta(minutes=30)]
         == 3
     )
@@ -65,10 +70,11 @@ def test_load_series_with_larger_expected_time_window():
     with pytest.raises(MissingData) as e_info:
         s.load_series(
             expected_frequency=timedelta(minutes=15),
-            check_datetime_index_window=(
+            time_window=(
                 dt - timedelta(minutes=15),
                 dt + timedelta(minutes=45),
             ),
+            check_time_window=True,
         )
     assert "starts too late" in str(e_info.value)
     assert "ends too early" in str(e_info.value)

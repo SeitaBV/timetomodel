@@ -94,8 +94,9 @@ class SeriesSpecs(object):
     def load_series(
         self,
         expected_frequency: timedelta,
+        time_window: Tuple[datetime, datetime] = None,
         transform_features: bool = False,
-        check_datetime_index_window: Optional[Tuple[datetime, datetime]] = None,
+        check_time_window: bool = False,
     ) -> pd.Series:
         """Load the series data, check compatibility of series data with model specs
            and perform feature transformation, if needed.
@@ -116,8 +117,10 @@ class SeriesSpecs(object):
 
            `interpolation_config={"method": "time", "limit": 1}`
 
-           You can check if a time window would be feasible, i.e. if enough data is loaded, and get suggestions.
+           To be able to upsample, make sure a time_window is set.
            The time window is a tuple stating the index of the first and the index of the last data point.
+
+           You can check if a time window would be feasible, i.e. if enough data is loaded, and get suggestions.
         """
         data = self._load_series().sort_index()
 
@@ -127,16 +130,24 @@ class SeriesSpecs(object):
                 "Loaded series has no DatetimeIndex, but %s" % type(data.index).__name__
             )
 
-        # check if time series frequency is okay, if not then resample, and check again
-        if data.index.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
-            data = self.resample_data(data, expected_frequency)
-
         # make sure we have a time zone (default to UTC), save original time zone
         if data.index.tzinfo is None:
             self.original_tz = pytz.utc
             data.index = data.index.tz_localize(self.original_tz)
         else:
             self.original_tz = data.index.tzinfo
+
+        # interpret naive time_window in timezone of data
+        if time_window is not None and time_window[0].tzinfo is None:
+            time_window = (self.original_tz.localize(time_window[0]), time_window[1])
+        if time_window is not None and time_window[1].tzinfo is None:
+            time_window = (time_window[0], self.original_tz.localize(time_window[1]))
+
+        # check if time series frequency is okay, if not then resample, and check again
+        if data.index.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
+            data = self.resample_data(
+                data=data, expected_frequency=expected_frequency, time_window=time_window
+            )
 
         # Raise error if data is empty or contains nan values
         if data.empty:
@@ -149,24 +160,24 @@ class SeriesSpecs(object):
             )
 
         # check if we have enough data for the expected time window
-        if check_datetime_index_window is not None:
+        if check_time_window and time_window is not None:
             error_msg = ""
-            if data.index[0] > check_datetime_index_window[0]:
+            if data.index[0] > time_window[0]:
                 error_msg += (
                     "Data for %s starts too late (at %s), while we need data from %s "
                     % (
                         self.name,
                         data.index[0],
-                        check_datetime_index_window[0].astimezone(data.index[0].tzinfo),
+                        time_window[0].astimezone(data.index[0].tzinfo),
                     )
                 )
-            if data.index[-1] < check_datetime_index_window[1]:
+            if data.index[-1] < time_window[1]:
                 error_msg += (
                     "Data for %s ends too early (at %s), while we need data until %s "
                     % (
                         self.name,
                         data.index[-1],
-                        check_datetime_index_window[1].astimezone(
+                        time_window[1].astimezone(
                             data.index[-1].tzinfo
                         ),
                     )
@@ -193,7 +204,32 @@ class SeriesSpecs(object):
 
         return data
 
-    def resample_data(self, data, expected_frequency) -> pd.Series:
+    def resample_data(
+        self,
+        data,
+        time_window,
+        expected_frequency,
+    ) -> pd.Series:
+        if time_window is None:
+            time_window = (data.index[0], data.index[-1])
+        index = pd.date_range(
+            *time_window,
+            freq=expected_frequency,
+        )
+        if len(data) < len(index):
+            # upsampling: try to determine the number of consecutive NaN values to pad
+            try:
+                # in some cases the data explicitly defines the resolution of events to which the data pertains (timely-beliefs BeliefsDataFrames)
+                event_resolution = data.event_resolution if hasattr(data, "event_resolution") and isinstance(data.event_resolution, timedelta) else pd.totimedelta(pd.infer_freq(data.index))
+                limit = event_resolution // expected_frequency - 1
+            except Exception:
+                # no discernible event resolution; index frequency isn't helpful either
+                limit = None  # keep padding until the end of index
+            if limit is None or limit >= 1:
+                return data.reindex(index).fillna(method="pad", limit=limit)
+            return data.reindex(index)
+        # else downsampling (see below)
+
         if self.resampling_config is None:
             data = data.resample(
                 timedelta_to_pandas_freq_str(expected_frequency)
