@@ -32,9 +32,7 @@ def test_load_series():
             time_window=(dt, dt + timedelta(minutes=30)),
             expected_frequency=timedelta(minutes=15),
             check_time_window=True,
-        ).loc[
-            dt + timedelta(minutes=30)
-        ]
+        ).loc[dt + timedelta(minutes=30)]
         == 3
     )
 

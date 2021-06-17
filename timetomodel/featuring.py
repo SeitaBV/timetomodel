@@ -9,9 +9,12 @@ import pandas as pd
 import pytz
 
 from timetomodel.speccing import ModelSpecs
-from timetomodel.utils.time_utils import (get_feature_window, round_datetime,
-                                          timedelta_fits_into,
-                                          timedelta_to_pandas_freq_str)
+from timetomodel.utils.time_utils import (
+    get_feature_window,
+    round_datetime,
+    timedelta_fits_into,
+    timedelta_to_pandas_freq_str,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -88,16 +91,16 @@ def construct_features(
 def get_time_steps(
     time_range: Union[str, datetime, Tuple[datetime, datetime]], specs: ModelSpecs
 ) -> pd.DatetimeIndex:
-    """ Get relevant datetime indices to build features for.
+    """Get relevant datetime indices to build features for.
 
-        The time_range parameter can be one or two datetime objects, in which case this function builds a DateTimeIndex.
-        It can also be one of two strings: "train" or "test". In this situation, this function creates a training or
-        testing period from model specs.
+    The time_range parameter can be one or two datetime objects, in which case this function builds a DateTimeIndex.
+    It can also be one of two strings: "train" or "test". In this situation, this function creates a training or
+    testing period from model specs.
 
-        TODO: we can check (and complain) if datetime objects are incompatible to specs.frequency
-              e.g. if round_datetime(dt, by_seconds=specs.frequency.total_seconds()) != dt:
-                       raise Exception("%s is not compatible with frequency %s." % (dt, specs.frequency))
-              We have to discuss if we allow to use any time to start intervals or rather 15:00, 15:15, 15:30 etc ...
+    TODO: we can check (and complain) if datetime objects are incompatible to specs.frequency
+          e.g. if round_datetime(dt, by_seconds=specs.frequency.total_seconds()) != dt:
+                   raise Exception("%s is not compatible with frequency %s." % (dt, specs.frequency))
+          We have to discuss if we allow to use any time to start intervals or rather 15:00, 15:15, 15:30 etc ...
     """
     # check valid time_range parameter
     if not (

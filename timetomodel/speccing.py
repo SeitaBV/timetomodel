@@ -13,12 +13,19 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Query
 
-from timetomodel.exceptions import IncompatibleModelSpecs, MissingData, NaNData, UnsupportedModel
+from timetomodel.exceptions import (
+    IncompatibleModelSpecs,
+    MissingData,
+    NaNData,
+    UnsupportedModel,
+)
 from timetomodel.transforming import ReversibleTransformation, Transformation
 from timetomodel.utils.debug_utils import render_query
-from timetomodel.utils.time_utils import (timedelta_fits_into,
-                                          timedelta_to_pandas_freq_str,
-                                          tz_aware_utc_now)
+from timetomodel.utils.time_utils import (
+    timedelta_fits_into,
+    timedelta_to_pandas_freq_str,
+    tz_aware_utc_now,
+)
 
 """
 Specs for the context of your model and how to treat your model data.
@@ -99,28 +106,28 @@ class SeriesSpecs(object):
         check_time_window: bool = False,
     ) -> pd.Series:
         """Load the series data, check compatibility of series data with model specs
-           and perform feature transformation, if needed.
+        and perform feature transformation, if needed.
 
-           The actual implementation how to load is deferred to _load_series. Overwrite that for new subclasses.
+        The actual implementation how to load is deferred to _load_series. Overwrite that for new subclasses.
 
-           This function resamples data if the frequency is not equal to the expected frequency.
-           It is possible to customise this resampling (without that, we aggregate means after default resampling).
-           To customize resampling, pass in a `resampling_config` argument when you initialize a SeriesSpecs,
-           with an aggregation method name (e.g. "mean") and kw params which are to be passed into
-           `pandas.Series.resample`. For example:
+        This function resamples data if the frequency is not equal to the expected frequency.
+        It is possible to customise this resampling (without that, we aggregate means after default resampling).
+        To customize resampling, pass in a `resampling_config` argument when you initialize a SeriesSpecs,
+        with an aggregation method name (e.g. "mean") and kw params which are to be passed into
+        `pandas.Series.resample`. For example:
 
-           `resampling_config={"closed": "left", "aggregation": "sum"}`
+        `resampling_config={"closed": "left", "aggregation": "sum"}`
 
-           Similarly, pass in an `interpolation_config` to the class with kw params to pass into 
-           `pandas.Series.interpolate`. For example, to fill gaps of at most 1 consecutive NaN value through
-           interpolation of the time index:
+        Similarly, pass in an `interpolation_config` to the class with kw params to pass into
+        `pandas.Series.interpolate`. For example, to fill gaps of at most 1 consecutive NaN value through
+        interpolation of the time index:
 
-           `interpolation_config={"method": "time", "limit": 1}`
+        `interpolation_config={"method": "time", "limit": 1}`
 
-           To be able to upsample, make sure a time_window is set.
-           The time window is a tuple stating the index of the first and the index of the last data point.
+        To be able to upsample, make sure a time_window is set.
+        The time window is a tuple stating the index of the first and the index of the last data point.
 
-           You can check if a time window would be feasible, i.e. if enough data is loaded, and get suggestions.
+        You can check if a time window would be feasible, i.e. if enough data is loaded, and get suggestions.
         """
         data = self._load_series().sort_index()
 
@@ -146,7 +153,9 @@ class SeriesSpecs(object):
         # check if time series frequency is okay, if not then resample, and check again
         if data.index.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
             data = self.resample_data(
-                data=data, expected_frequency=expected_frequency, time_window=time_window
+                data=data,
+                expected_frequency=expected_frequency,
+                time_window=time_window,
             )
 
         # Raise error if data is empty or contains nan values
@@ -177,9 +186,7 @@ class SeriesSpecs(object):
                     % (
                         self.name,
                         data.index[-1],
-                        time_window[1].astimezone(
-                            data.index[-1].tzinfo
-                        ),
+                        time_window[1].astimezone(data.index[-1].tzinfo),
                     )
                 )
             if error_msg:
@@ -220,7 +227,12 @@ class SeriesSpecs(object):
             # upsampling: try to determine the number of consecutive NaN values to pad
             try:
                 # in some cases the data explicitly defines the resolution of events to which the data pertains (timely-beliefs BeliefsDataFrames)
-                event_resolution = data.event_resolution if hasattr(data, "event_resolution") and isinstance(data.event_resolution, timedelta) else pd.totimedelta(pd.infer_freq(data.index))
+                event_resolution = (
+                    data.event_resolution
+                    if hasattr(data, "event_resolution")
+                    and isinstance(data.event_resolution, timedelta)
+                    else pd.totimedelta(pd.infer_freq(data.index))
+                )
                 limit = event_resolution // expected_frequency - 1
             except Exception:
                 # no discernible event resolution; index frequency isn't helpful either
@@ -241,7 +253,7 @@ class SeriesSpecs(object):
                     k: v
                     for k, v in self.resampling_config.items()
                     if k != "aggregation"
-                }
+                },
             )
             if "aggregation" not in self.resampling_config:
                 data = data_resampler.mean()
@@ -470,7 +482,7 @@ class DBSeriesSpecs(SeriesSpecs):
         return df["value"]
 
     def check_data(self, df: pd.DataFrame):
-        """ Raise error if data is empty or contains nan values.
+        """Raise error if data is empty or contains nan values.
         Here, other than in load_series, we can show the query, which is quite helpful."""
         if df.empty:
             raise MissingData(
@@ -493,8 +505,7 @@ class DBSeriesSpecs(SeriesSpecs):
 
 
 class ModelSpecs(object):
-    """Describes a model and how it was trained.
-    """
+    """Describes a model and how it was trained."""
 
     outcome_var: SeriesSpecs
     model_type: Type  # e.g. statsmodels.api.OLS, sklearn.linear_model.LinearRegression, ...
