@@ -78,7 +78,10 @@ def test_load_series_with_larger_expected_time_window():
     assert "ends too early" in str(e_info.value)
 
 
-def test_load_series_with_frequency_resampling():
+@pytest.mark.parametrize(
+    "down_or_up", ["down", "up"]
+)
+def test_load_series_with_frequency_resampling(down_or_up: str):
     dt = datetime(2019, 1, 29, 15, 15)
     s = ObjectSeriesSpecs(
         data=pd.Series(
@@ -87,12 +90,15 @@ def test_load_series_with_frequency_resampling():
         ),
         name="mydata",
     )
-    series = s.load_series(expected_frequency=timedelta(hours=1))
-    assert len(series) == 1
-    assert series[0] == 2  # the mean
+    series = s.load_series(expected_frequency=timedelta(hours=1) if down_or_up == "down" else timedelta(minutes=5))
+    assert len(series) == 1 if down_or_up == "down" else 9
+    assert series.mean() == 2  # the mean remains the same
 
 
-def test_load_series_with_non_existing_custom_frequency_resampling():
+@pytest.mark.parametrize(
+    "down_or_up", ["down", "up"]
+)
+def test_load_series_with_non_existing_custom_frequency_resampling(down_or_up: str):
     dt = datetime(2019, 1, 29, 15, 15)
     s = ObjectSeriesSpecs(
         data=pd.Series(
@@ -100,15 +106,18 @@ def test_load_series_with_non_existing_custom_frequency_resampling():
             data=[1, 2, 3],
         ),
         name="mydata",
-        resampling_config={"downsampling_method": "GGG"},
+        resampling_config={f"{down_or_up}sampling_method": "GGG"},
     )
 
     with pytest.raises(IncompatibleModelSpecs) as e_info:
-        s.load_series(expected_frequency=timedelta(hours=1))
-    assert "Cannot find downsampling method GGG" in str(e_info.value)
+        s.load_series(expected_frequency=timedelta(hours=1) if down_or_up == "down" else timedelta(minutes=5))
+    assert f"Cannot find {down_or_up}sampling method GGG" in str(e_info.value)
 
 
-def test_load_series_with_custom_frequency_resampling():
+@pytest.mark.parametrize(
+    "down_or_up", ["down", "up"]
+)
+def test_load_series_with_custom_frequency_resampling(down_or_up: str):
     dt = datetime(2019, 1, 29, 15, 15)
     s = ObjectSeriesSpecs(
         data=pd.Series(
@@ -116,12 +125,12 @@ def test_load_series_with_custom_frequency_resampling():
             data=[1, 2, 3],
         ),
         name="mydata",
-        resampling_config={"downsampling_method": "sum"},
+        resampling_config={"downsampling_method": "sum", "upsampling_method": "reverse_sum"},
     )
 
-    series = s.load_series(expected_frequency=timedelta(hours=1))
-    assert len(series) == 1
-    assert series[0] == 6  # the sum
+    series = s.load_series(expected_frequency=timedelta(hours=1) if down_or_up == "down" else timedelta(minutes=5))
+    assert len(series) == 1 if down_or_up == "down" else 9
+    assert sum(series) == 6  # the sum remains the same
 
 
 def test_load_series_without_data():

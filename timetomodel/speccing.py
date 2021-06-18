@@ -76,8 +76,8 @@ class SeriesSpecs(object):
         ] = None,  # TODO: why should this be possible to be set?
         feature_transformation: Optional[ReversibleTransformation] = None,
         post_load_processing: Optional[Transformation] = None,
-        resampling_config: Dict[str, Any] = None,
-        interpolation_config: Dict[str, Any] = None,
+        resampling_config: Optional[Dict[str, Any]] = None,
+        interpolation_config: Optional[Dict[str, Any]] = None,
     ):
 
         # todo: deprecate 'aggregation' key (FutureWarning first introduced in 0.7.0)
@@ -96,7 +96,7 @@ class SeriesSpecs(object):
         self.original_tz = original_tz
         self.feature_transformation = feature_transformation
         self.post_load_processing = post_load_processing
-        self.resampling_config = resampling_config
+        self.resampling_config = pass_or_set_default_resampling_config(resampling_config)
         self.interpolation_config = interpolation_config
         self.__series_type__ = self.__class__.__name__
 
@@ -237,55 +237,64 @@ class SeriesSpecs(object):
             *time_window,
             freq=expected_frequency,
         )
-        if len(data) < len(index):
-            # upsampling: try to determine the number of consecutive NaN values to pad
-            try:
-                # in some cases the data explicitly defines the resolution of events to which the data pertains (timely-beliefs BeliefsDataFrames)
-                event_resolution = (
-                    data.event_resolution
-                    if hasattr(data, "event_resolution")
-                    and isinstance(data.event_resolution, timedelta)
-                    else pd.totimedelta(pd.infer_freq(data.index))
-                )
-                limit = event_resolution // expected_frequency - 1
-            except Exception:
-                # no discernible event resolution; index frequency isn't helpful either
-                limit = None  # keep padding until the end of index
-            if limit is None or limit >= 1:
-                return data.reindex(index).fillna(method="pad", limit=limit)
-            return data.reindex(index)
-        # else downsampling (see below)
+        """ Resample data to the expected frequency.
+        
+        In some cases the data explicitly defines the resolution of events to which the data pertains
+        (e.g. timely-beliefs BeliefsDataFrames).
+        Otherwise, the inferred frequency of the data is used as the event resolution.
+        """
 
-        if self.resampling_config is None:
-            data = data.resample(
-                timedelta_to_pandas_freq_str(expected_frequency)
-            ).mean()
+        # Convert to PeriodIndex for desired behavior under resampling
+        # remember timezone before resampling, see https://github.com/pandas-dev/pandas/issues/28039
+        tz = data.index.tzinfo
+        # timely-beliefs compatibility
+        event_resolution = data.event_resolution if hasattr(data, "event_resolution") else pd.infer_freq(data.index)
+        data.index = data.index.to_period(event_resolution)
+
+        data_resampler = data.resample(
+            timedelta_to_pandas_freq_str(expected_frequency),
+            **{
+                k: v
+                for k, v in self.resampling_config.items()
+                if k not in ("downsampling_method", "upsampling_method")
+            },
+        )
+
+        # Monkeypatch resampler only if needed
+        if self.resampling_config["upsampling_method"] == "reverse_sum":
+            def reverse_sum(resampler):
+                """https://stackoverflow.com/questions/54877205#68019138"""
+                s = resampler.asfreq()
+                return s.fillna(0).groupby(s.notna().cumsum()).transform('mean')
+            from pandas.core.resample import Resampler
+            Resampler.reverse_sum = reverse_sum
+
+        # Choose between upsampling or downsampling
+        if len(data) > len(index):
+            up_or_down_sampling = "down"
         else:
-            data_resampler = data.resample(
-                timedelta_to_pandas_freq_str(expected_frequency),
-                **{
-                    k: v
-                    for k, v in self.resampling_config.items()
-                    if k != "downsampling_method"
-                },
+            up_or_down_sampling = "up"
+
+        # Apply resampling method
+        for resampling_method_name, resampling_method in inspect.getmembers(
+            data_resampler, inspect.ismethod
+        ):
+            if self.resampling_config[f"{up_or_down_sampling}sampling_method"] == resampling_method_name:
+                data = resampling_method()
+                break
+        else:
+            raise IncompatibleModelSpecs(
+                f"Cannot find {up_or_down_sampling}sampling method %s on %s"
+                % (
+                    self.resampling_config[f"{up_or_down_sampling}sampling_method"],
+                    data_resampler,
+                )
             )
-            if "downsampling_method" not in self.resampling_config:
-                data = data_resampler.mean()
-            else:
-                for agg_name, agg_method in inspect.getmembers(
-                    data_resampler, inspect.ismethod
-                ):
-                    if self.resampling_config["downsampling_method"] == agg_name:
-                        data = agg_method()
-                        break
-                else:
-                    raise IncompatibleModelSpecs(
-                        "Cannot find downsampling method %s on %s"
-                        % (
-                            self.resampling_config["downsampling_method"],
-                            data_resampler,
-                        )
-                    )
+
+        # Convert to DatetimeIndex and place back timezone
+        data.index = data.index.to_timestamp().tz_localize(tz)
+        data.index.freq = expected_frequency
+
         return data
 
     def interpolate_data(self, data) -> pd.Series:
@@ -633,3 +642,19 @@ def parse_series_specs(
         return ObjectSeriesSpecs(specs, name)
     else:
         return specs
+
+
+def pass_or_set_default_resampling_config(resampling_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Set default downsampling_method and upsampling_method if these are missing.
+
+    The default downsampling method is "mean".
+    The default upsampling method is "pad".
+    """
+
+    if resampling_config is None:
+        resampling_config = {}
+    if resampling_config.get("downsampling_method", None) is None:
+        resampling_config["downsampling_method"] = "mean"
+    if resampling_config.get("upsampling_method", None) is None:
+        resampling_config["upsampling_method"] = "pad"
+    return resampling_config
