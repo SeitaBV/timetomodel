@@ -96,7 +96,9 @@ class SeriesSpecs(object):
         self.original_tz = original_tz
         self.feature_transformation = feature_transformation
         self.post_load_processing = post_load_processing
-        self.resampling_config = pass_or_set_default_resampling_config(resampling_config)
+        self.resampling_config = pass_or_set_default_resampling_config(
+            resampling_config
+        )
         self.interpolation_config = interpolation_config
         self.__series_type__ = self.__class__.__name__
 
@@ -248,7 +250,11 @@ class SeriesSpecs(object):
         # remember timezone before resampling, see https://github.com/pandas-dev/pandas/issues/28039
         tz = data.index.tzinfo
         # timely-beliefs compatibility
-        event_resolution = data.event_resolution if hasattr(data, "event_resolution") else pd.infer_freq(data.index)
+        event_resolution = (
+            data.event_resolution
+            if hasattr(data, "event_resolution")
+            else pd.infer_freq(data.index)
+        )
         data.index = data.index.to_period(event_resolution)
 
         data_resampler = data.resample(
@@ -262,11 +268,14 @@ class SeriesSpecs(object):
 
         # Monkeypatch resampler only if needed
         if self.resampling_config["upsampling_method"] == "reverse_sum":
+
             def reverse_sum(resampler):
                 """https://stackoverflow.com/questions/54877205#68019138"""
                 s = resampler.asfreq()
-                return s.fillna(0).groupby(s.notna().cumsum()).transform('mean')
+                return s.fillna(0).groupby(s.notna().cumsum()).transform("mean")
+
             from pandas.core.resample import Resampler
+
             Resampler.reverse_sum = reverse_sum
 
         # Choose between upsampling or downsampling
@@ -279,7 +288,10 @@ class SeriesSpecs(object):
         for resampling_method_name, resampling_method in inspect.getmembers(
             data_resampler, inspect.ismethod
         ):
-            if self.resampling_config[f"{up_or_down_sampling}sampling_method"] == resampling_method_name:
+            if (
+                self.resampling_config[f"{up_or_down_sampling}sampling_method"]
+                == resampling_method_name
+            ):
                 data = resampling_method()
                 break
         else:
@@ -644,7 +656,9 @@ def parse_series_specs(
         return specs
 
 
-def pass_or_set_default_resampling_config(resampling_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def pass_or_set_default_resampling_config(
+    resampling_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """Set default downsampling_method and upsampling_method if these are missing.
 
     The default downsampling method is "mean".
