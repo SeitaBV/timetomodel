@@ -134,6 +134,13 @@ class SeriesSpecs(object):
 
         `resampling_config=dict(closed="left", downsampling_method="sum", upsampling_method="reverse_sum")`
 
+        Here, closed="left" will become an argument to `pandas.Series.resample`.
+        When downsampling, `pandas.Series.resample().sum()` will be called.
+        When upsampling, `pandas.Series.resample().reverse_sum()` will be called.
+        Acceptable values for downsampling_method and upsampling_method are (string names of) possible
+        re-sample methods offered by pandas plus a timetomodel-version of "reverse_sum".
+        "mean" and "pad" are the default values for downsampling and upsampling, respectively.
+
         Similarly, pass in an `interpolation_config` to the class with keyword params to pass into
         `pandas.Series.interpolate`. For example, to fill gaps of at most 1 consecutive NaN value through
         interpolation of the time index (note that interpolation happens after resampling):
