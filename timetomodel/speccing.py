@@ -180,6 +180,7 @@ class SeriesSpecs(object):
                 expected_frequency=expected_frequency,
                 time_window=time_window,
             )
+            assert data.index.freqstr == timedelta_to_pandas_freq_str(expected_frequency)
 
         # Raise error if data is empty or contains nan values
         if data.empty:
