@@ -96,7 +96,7 @@ class SeriesSpecs(object):
         self.original_tz = original_tz
         self.feature_transformation = feature_transformation
         self.post_load_processing = post_load_processing
-        self.resampling_config = pass_or_set_default_resampling_config(
+        self.resampling_config = ensure_resampling_config_is_set(
             resampling_config
         )
         self.interpolation_config = interpolation_config
@@ -664,7 +664,7 @@ def parse_series_specs(
         return specs
 
 
-def pass_or_set_default_resampling_config(
+def ensure_resampling_config_is_set(
     resampling_config: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """Set default downsampling_method and upsampling_method if these are missing.
