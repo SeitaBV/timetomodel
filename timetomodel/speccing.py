@@ -300,7 +300,11 @@ class SeriesSpecs(object):
                 self.resampling_config[f"{up_or_down_sampling}sampling_method"]
                 == resampling_method_name
             ):
-                data = resampling_method()
+                if up_or_down_sampling == "up":
+                    # Fill NaN values introduced by upsampling, but no more than that
+                    data = resampling_method(limit=event_resolution // expected_frequency - 1)
+                else:
+                    data = resampling_method()
                 break
         else:
             raise IncompatibleModelSpecs(
