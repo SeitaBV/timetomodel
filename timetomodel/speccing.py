@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union
 import numpy as np
 import pandas as pd
 import pytz
+from pandas.tseries.frequencies import to_offset
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Query
@@ -96,9 +97,7 @@ class SeriesSpecs(object):
         self.original_tz = original_tz
         self.feature_transformation = feature_transformation
         self.post_load_processing = post_load_processing
-        self.resampling_config = ensure_resampling_config_is_set(
-            resampling_config
-        )
+        self.resampling_config = ensure_resampling_config_is_set(resampling_config)
         self.interpolation_config = interpolation_config
         self.__series_type__ = self.__class__.__name__
 
@@ -132,9 +131,17 @@ class SeriesSpecs(object):
         and keyword params which are to be passed into `pandas.Series.resample`.
         For example:
 
-        `resampling_config=dict(closed="left", downsampling_method="sum", upsampling_method="reverse_sum")`
+        ```
+        resampling_config=dict(
+            event_resolution=timedelta(hours=1),
+            closed="left",
+            downsampling_method="sum",
+            upsampling_method="reverse_sum",
+        )
+        ```
 
-        Here, closed="left" will become an argument to `pandas.Series.resample`.
+        Here, the event resolution describes that each data point denotes a value over a 1-hour period.
+        closed="left" will become an argument to `pandas.Series.resample`.
         When downsampling, `pandas.Series.resample().sum()` will be called.
         When upsampling, `pandas.Series.resample().reverse_sum()` will be called.
         Acceptable values for downsampling_method and upsampling_method are (string names of) possible
@@ -180,7 +187,9 @@ class SeriesSpecs(object):
                 expected_frequency=expected_frequency,
                 time_window=time_window,
             )
-            assert data.index.freqstr == timedelta_to_pandas_freq_str(expected_frequency)
+            assert data.index.freqstr == timedelta_to_pandas_freq_str(
+                expected_frequency
+            )
 
         # Raise error if data is empty or contains nan values
         if data.empty:
@@ -241,8 +250,8 @@ class SeriesSpecs(object):
         time_window,
         expected_frequency,
     ) -> pd.Series:
-        """ Resample data to the expected frequency.
-        
+        """Resample data to the expected frequency.
+
         In some cases the data explicitly defines the resolution of events to which the data pertains
         (e.g. timely-beliefs BeliefsDataFrames).
         Otherwise, the inferred frequency of the data is used as the event resolution.
@@ -251,7 +260,7 @@ class SeriesSpecs(object):
         # Monkeypatch resampler only if needed
         if self.resampling_config["upsampling_method"] == "reverse_sum":
 
-            def reverse_sum(resampler):
+            def reverse_sum(resampler, **kwargs):
                 """https://stackoverflow.com/questions/54877205#68019138"""
                 s = resampler.asfreq()
                 return s.fillna(0).groupby(s.notna().cumsum()).transform("mean")
@@ -260,15 +269,37 @@ class SeriesSpecs(object):
 
             Resampler.reverse_sum = reverse_sum
 
-        # Convert to PeriodIndex for desired behavior under resampling
+        # Get or infer event resolution
+        event_resolution = (
+            # set through resampling config
+            self.resampling_config.pop("event_resolution")
+            if "event_resolution" in self.resampling_config
+            # timely-beliefs compatibility
+            else data.event_resolution
+            if hasattr(data, "event_resolution")
+            # use data frequency
+            else pd.infer_freq(data.index)
+            if pd.infer_freq(data.index) is not None
+            # best guess from time window
+            else time_window / len(data)
+            if time_window is not None
+            # best guess from data index
+            else (data.index[-1] - data.index[0]) / len(data)
+            if len(data) != 0
+            # assume instantaneous values, which can't be upsampled
+            else timedelta()
+        )
+        resample_ratio = pd.to_timedelta(to_offset(event_resolution)) // pd.Timedelta(
+            expected_frequency
+        )
+        if resample_ratio == 1:
+            # fill in missing frequency and abort resampling
+            data.index.freq = expected_frequency
+            return data
+
+        # Convert to PeriodIndex for desired behavior under resampling (specifically, binning the right-most period)
         # remember timezone before resampling, see https://github.com/pandas-dev/pandas/issues/28039
         tz = data.index.tzinfo
-        # timely-beliefs compatibility
-        event_resolution = (
-            data.event_resolution
-            if hasattr(data, "event_resolution")
-            else pd.infer_freq(data.index)
-        )
         data.index = data.index.to_period(event_resolution)
 
         data_resampler = data.resample(
@@ -281,13 +312,7 @@ class SeriesSpecs(object):
         )
 
         # Choose between upsampling or downsampling
-        if time_window is None:
-            time_window = (data.index[0], data.index[-1])
-        index = pd.date_range(
-            *time_window,
-            freq=expected_frequency,
-        )
-        if len(data) > len(index):
+        if resample_ratio < 1:
             up_or_down_sampling = "down"
         else:
             up_or_down_sampling = "up"
@@ -302,7 +327,7 @@ class SeriesSpecs(object):
             ):
                 if up_or_down_sampling == "up":
                     # Fill NaN values introduced by upsampling, but no more than that
-                    data = resampling_method(limit=event_resolution // expected_frequency - 1)
+                    data = resampling_method(limit=resample_ratio - 1)
                 else:
                     data = resampling_method()
                 break
