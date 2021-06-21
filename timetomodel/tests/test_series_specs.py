@@ -93,7 +93,7 @@ def test_load_series_with_frequency_resampling(down_or_up: str):
         if down_or_up == "down"
         else timedelta(minutes=5)
     )
-    assert len(series) == 1 if down_or_up == "down" else 9
+    assert len(series) == 1 if down_or_up == "down" else len(series) == 9
     assert series.mean() == 2  # the mean remains the same
 
 
@@ -138,7 +138,7 @@ def test_load_series_with_custom_frequency_resampling(down_or_up: str):
         if down_or_up == "down"
         else timedelta(minutes=5)
     )
-    assert len(series) == 1 if down_or_up == "down" else 9
+    assert len(series) == 1 if down_or_up == "down" else len(series) == 9
     assert sum(series) == 6  # the sum remains the same
 
 
