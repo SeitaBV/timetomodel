@@ -241,18 +241,24 @@ class SeriesSpecs(object):
         time_window,
         expected_frequency,
     ) -> pd.Series:
-        if time_window is None:
-            time_window = (data.index[0], data.index[-1])
-        index = pd.date_range(
-            *time_window,
-            freq=expected_frequency,
-        )
         """ Resample data to the expected frequency.
         
         In some cases the data explicitly defines the resolution of events to which the data pertains
         (e.g. timely-beliefs BeliefsDataFrames).
         Otherwise, the inferred frequency of the data is used as the event resolution.
         """
+
+        # Monkeypatch resampler only if needed
+        if self.resampling_config["upsampling_method"] == "reverse_sum":
+
+            def reverse_sum(resampler):
+                """https://stackoverflow.com/questions/54877205#68019138"""
+                s = resampler.asfreq()
+                return s.fillna(0).groupby(s.notna().cumsum()).transform("mean")
+
+            from pandas.core.resample import Resampler
+
+            Resampler.reverse_sum = reverse_sum
 
         # Convert to PeriodIndex for desired behavior under resampling
         # remember timezone before resampling, see https://github.com/pandas-dev/pandas/issues/28039
@@ -274,19 +280,13 @@ class SeriesSpecs(object):
             },
         )
 
-        # Monkeypatch resampler only if needed
-        if self.resampling_config["upsampling_method"] == "reverse_sum":
-
-            def reverse_sum(resampler):
-                """https://stackoverflow.com/questions/54877205#68019138"""
-                s = resampler.asfreq()
-                return s.fillna(0).groupby(s.notna().cumsum()).transform("mean")
-
-            from pandas.core.resample import Resampler
-
-            Resampler.reverse_sum = reverse_sum
-
         # Choose between upsampling or downsampling
+        if time_window is None:
+            time_window = (data.index[0], data.index[-1])
+        index = pd.date_range(
+            *time_window,
+            freq=expected_frequency,
+        )
         if len(data) > len(index):
             up_or_down_sampling = "down"
         else:
