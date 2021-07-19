@@ -127,8 +127,8 @@ class SeriesSpecs(object):
         This function resamples data if the frequency is not equal to the expected frequency.
         It is possible to customise this resampling (without that, we aggregate means after default resampling).
         To customize resampling, pass in a `resampling_config` argument when you initialize a SeriesSpecs,
-        with downsampling_method and upsampling_method names (e.g. "mean" and "pad", respectively)
-        and keyword params which are to be passed into `pandas.Series.resample`.
+        with downsampling_method and upsampling_method names (e.g. "mean" and "pad", respectively),
+        an optional event_resolution, and keyword params which are to be passed into `pandas.Series.resample`.
         For example:
 
         ```
@@ -140,10 +140,16 @@ class SeriesSpecs(object):
         )
         ```
 
-        Here, the event resolution describes that each data point denotes a value over a 1-hour period.
-        closed="left" will become an argument to `pandas.Series.resample`.
-        When downsampling, `pandas.Series.resample().sum()` will be called.
-        When upsampling, `pandas.Series.resample().reverse_sum()` will be called.
+        Here:
+        - the event resolution describes that, before resampling,
+          each data point denotes a value over a 1-hour period.
+          Being explicit about the event resolution is especially important when the data frequency
+          is not the same as the event resolution, for example, in the case of
+          upsampling a time series containing hourly averages with only one data point per day.
+        - closed="left" will become an argument to `pandas.Series.resample`.
+          It denotes that each period in the time series is indexed by its start time.
+        - When downsampling, `pandas.Series.resample().sum()` will be called.
+        - When upsampling, `pandas.Series.resample().reverse_sum()` will be called.
         Acceptable values for downsampling_method and upsampling_method are (string names of) possible
         re-sample methods offered by pandas plus a timetomodel-version of "reverse_sum".
         "mean" and "pad" are the default values for downsampling and upsampling, respectively.
