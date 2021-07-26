@@ -92,8 +92,8 @@ Here is an example where we describe a solar time series problem, and use ``stat
 ![Evaluation result](img/solar-forecast-evaluation.png)
     
     # For engineers a): Change data sources to use database (hinted)
-    solar_model1h_specs.outcome_var = speccing.DBSeriesSpecs(db_engine=..., query=...)
-    solar_model1h_specs.regressors[0] = speccing.DBSeriesSpecs(db_engine=..., query=...)
+    solar_model1h_specs.outcome_var = speccing.DBSeriesSpecs(query=...)
+    solar_model1h_specs.regressors[0] = speccing.DBSeriesSpecs(query=...)
     
     # For engineers b): Use model to make forecasts for an hour
     forecasts, model_state = make_rolling_forecasts(

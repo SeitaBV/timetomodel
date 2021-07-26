@@ -11,7 +11,6 @@ import pandas as pd
 import pytz
 from pandas.tseries.frequencies import to_offset
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Query
 
 from timetomodel.exceptions import (
@@ -515,12 +514,10 @@ class DBSeriesSpecs(SeriesSpecs):
     A "datetime" column (which will be set as index of the series) and a "value" column.
     """
 
-    db: Engine
     query: Query
 
     def __init__(
         self,
-        db_engine: Engine,
         query: Query,
         name: str,
         original_tz: Optional[tzinfo] = pytz.utc,  # postgres stores naive datetimes
@@ -537,7 +534,6 @@ class DBSeriesSpecs(SeriesSpecs):
             resampling_config,
             interpolation_config,
         )
-        self.db_engine = db_engine
         self.query = query
 
     def _load_series(self) -> pd.Series:
