@@ -9,16 +9,24 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union
 import numpy as np
 import pandas as pd
 import pytz
+from pandas.tseries.frequencies import to_offset
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Query
 
-from timetomodel.exceptions import IncompatibleModelSpecs, MissingData, NaNData, UnsupportedModel
+from timetomodel.exceptions import (
+    IncompatibleModelSpecs,
+    MissingData,
+    NaNData,
+    UnsupportedModel,
+)
 from timetomodel.transforming import ReversibleTransformation, Transformation
 from timetomodel.utils.debug_utils import render_query
-from timetomodel.utils.time_utils import (timedelta_fits_into,
-                                          timedelta_to_pandas_freq_str,
-                                          tz_aware_utc_now)
+from timetomodel.utils.time_utils import (
+    timedelta_fits_into,
+    timedelta_to_pandas_freq_str,
+    tz_aware_utc_now,
+)
 
 """
 Specs for the context of your model and how to treat your model data.
@@ -69,14 +77,27 @@ class SeriesSpecs(object):
         ] = None,  # TODO: why should this be possible to be set?
         feature_transformation: Optional[ReversibleTransformation] = None,
         post_load_processing: Optional[Transformation] = None,
-        resampling_config: Dict[str, Any] = None,
-        interpolation_config: Dict[str, Any] = None,
+        resampling_config: Optional[Dict[str, Any]] = None,
+        interpolation_config: Optional[Dict[str, Any]] = None,
     ):
+
+        # todo: deprecate 'aggregation' key (FutureWarning first introduced in 0.7.0)
+        if resampling_config is not None and "aggregation" in resampling_config.keys():
+            warnings.warn(
+                FutureWarning(
+                    f"The 'aggregation' key is deprecated and will raise KeyError in a future version. To silence this warning, replace {{'aggregation': '{resampling_config['aggregation']}'}} with {{'downsampling_method': '{resampling_config['aggregation']}'}}."
+                )
+            )
+            if not hasattr(resampling_config, "downsampling_method"):
+                resampling_config["downsampling_method"] = resampling_config[
+                    "aggregation"
+                ]
+
         self.name = name
         self.original_tz = original_tz
         self.feature_transformation = feature_transformation
         self.post_load_processing = post_load_processing
-        self.resampling_config = resampling_config
+        self.resampling_config = ensure_resampling_config_is_set(resampling_config)
         self.interpolation_config = interpolation_config
         self.__series_type__ = self.__class__.__name__
 
@@ -94,30 +115,55 @@ class SeriesSpecs(object):
     def load_series(
         self,
         expected_frequency: timedelta,
+        time_window: Tuple[datetime, datetime] = None,
         transform_features: bool = False,
-        check_datetime_index_window: Optional[Tuple[datetime, datetime]] = None,
+        check_time_window: bool = False,
     ) -> pd.Series:
         """Load the series data, check compatibility of series data with model specs
-           and perform feature transformation, if needed.
+        and perform feature transformation, if needed.
 
-           The actual implementation how to load is deferred to _load_series. Overwrite that for new subclasses.
+        The actual implementation how to load is deferred to _load_series. Overwrite that for new subclasses.
 
-           This function resamples data if the frequency is not equal to the expected frequency.
-           It is possible to customise this resampling (without that, we aggregate means after default resampling).
-           To customize resampling, pass in a `resampling_config` argument when you initialize a SeriesSpecs,
-           with an aggregation method name (e.g. "mean") and kw params which are to be passed into
-           `pandas.Series.resample`. For example:
+        This function resamples data if the frequency is not equal to the expected frequency.
+        It is possible to customise this resampling (without that, we aggregate means after default resampling).
+        To customize resampling, pass in a `resampling_config` argument when you initialize a SeriesSpecs,
+        with downsampling_method and upsampling_method names (e.g. "mean" and "pad", respectively),
+        an optional event_resolution, and keyword params which are to be passed into `pandas.Series.resample`.
+        For example:
 
-           `resampling_config={"closed": "left", "aggregation": "sum"}`
+        ```
+        resampling_config=dict(
+            event_resolution=timedelta(hours=1),
+            closed="left",
+            downsampling_method="sum",
+            upsampling_method="reverse_sum",
+        )
+        ```
 
-           Similarly, pass in an `interpolation_config` to the class with kw params to pass into 
-           `pandas.Series.interpolate`. For example, to fill gaps of at most 1 consecutive NaN value through
-           interpolation of the time index:
+        Here:
+        - the event resolution describes that, before resampling,
+          each data point denotes a value over a 1-hour period.
+          Being explicit about the event resolution is especially important when the data frequency
+          is not the same as the event resolution, for example, in the case of
+          upsampling a time series containing hourly averages with only one data point per day.
+        - closed="left" will become an argument to `pandas.Series.resample`.
+          It denotes that each period in the time series is indexed by its start time.
+        - When downsampling, `pandas.Series.resample().sum()` will be called.
+        - When upsampling, `pandas.Series.resample().reverse_sum()` will be called.
+        Acceptable values for downsampling_method and upsampling_method are (string names of) possible
+        re-sample methods offered by pandas plus a timetomodel-version of "reverse_sum".
+        "mean" and "pad" are the default values for downsampling and upsampling, respectively.
 
-           `interpolation_config={"method": "time", "limit": 1}`
+        Similarly, pass in an `interpolation_config` to the class with keyword params to pass into
+        `pandas.Series.interpolate`. For example, to fill gaps of at most 1 consecutive NaN value through
+        interpolation of the time index (note that interpolation happens after resampling):
 
-           You can check if a time window would be feasible, i.e. if enough data is loaded, and get suggestions.
-           The time window is a tuple stating the index of the first and the index of the last data point.
+        `interpolation_config=dict(method="time", limit=1)`
+
+        To be able to upsample, make sure a time_window is set.
+        The time window is a tuple stating the index of the first and the index of the last data point.
+
+        You can check if a time window would be feasible, i.e. if enough data is loaded, and get suggestions.
         """
         data = self._load_series().sort_index()
 
@@ -127,16 +173,29 @@ class SeriesSpecs(object):
                 "Loaded series has no DatetimeIndex, but %s" % type(data.index).__name__
             )
 
-        # check if time series frequency is okay, if not then resample, and check again
-        if data.index.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
-            data = self.resample_data(data, expected_frequency)
-
         # make sure we have a time zone (default to UTC), save original time zone
         if data.index.tzinfo is None:
             self.original_tz = pytz.utc
             data.index = data.index.tz_localize(self.original_tz)
         else:
             self.original_tz = data.index.tzinfo
+
+        # interpret naive time_window in timezone of data
+        if time_window is not None and time_window[0].tzinfo is None:
+            time_window = (self.original_tz.localize(time_window[0]), time_window[1])
+        if time_window is not None and time_window[1].tzinfo is None:
+            time_window = (time_window[0], self.original_tz.localize(time_window[1]))
+
+        # check if time series frequency is okay, if not then resample, and check again
+        if data.index.freqstr != timedelta_to_pandas_freq_str(expected_frequency):
+            data = self.resample_data(
+                data=data,
+                expected_frequency=expected_frequency,
+                time_window=time_window,
+            )
+            assert data.index.freqstr == timedelta_to_pandas_freq_str(
+                expected_frequency
+            )
 
         # Raise error if data is empty or contains nan values
         if data.empty:
@@ -149,26 +208,24 @@ class SeriesSpecs(object):
             )
 
         # check if we have enough data for the expected time window
-        if check_datetime_index_window is not None:
+        if check_time_window and time_window is not None:
             error_msg = ""
-            if data.index[0] > check_datetime_index_window[0]:
+            if data.index[0] > time_window[0]:
                 error_msg += (
                     "Data for %s starts too late (at %s), while we need data from %s "
                     % (
                         self.name,
                         data.index[0],
-                        check_datetime_index_window[0].astimezone(data.index[0].tzinfo),
+                        time_window[0].astimezone(data.index[0].tzinfo),
                     )
                 )
-            if data.index[-1] < check_datetime_index_window[1]:
+            if data.index[-1] < time_window[1]:
                 error_msg += (
                     "Data for %s ends too early (at %s), while we need data until %s "
                     % (
                         self.name,
                         data.index[-1],
-                        check_datetime_index_window[1].astimezone(
-                            data.index[-1].tzinfo
-                        ),
+                        time_window[1].astimezone(data.index[-1].tzinfo),
                     )
                 )
             if error_msg:
@@ -193,34 +250,106 @@ class SeriesSpecs(object):
 
         return data
 
-    def resample_data(self, data, expected_frequency) -> pd.Series:
-        if self.resampling_config is None:
-            data = data.resample(
-                timedelta_to_pandas_freq_str(expected_frequency)
-            ).mean()
+    def resample_data(
+        self,
+        data,
+        time_window,
+        expected_frequency,
+    ) -> pd.Series:
+        """Resample data to the expected frequency.
+
+        In some cases the data explicitly defines the resolution of events to which the data pertains
+        (e.g. timely-beliefs BeliefsDataFrames).
+        Otherwise, the inferred frequency of the data is used as the event resolution.
+        """
+
+        # Monkeypatch resampler only if needed
+        if self.resampling_config["upsampling_method"] == "reverse_sum":
+
+            def reverse_sum(resampler, **kwargs):
+                """https://stackoverflow.com/questions/54877205#68019138"""
+                s = resampler.asfreq()
+                return s.fillna(0).groupby(s.notna().cumsum()).transform("mean")
+
+            from pandas.core.resample import Resampler
+
+            Resampler.reverse_sum = reverse_sum
+
+        # Get or infer event resolution
+        event_resolution = (
+            # set through resampling config
+            self.resampling_config.pop("event_resolution")
+            if "event_resolution" in self.resampling_config
+            # timely-beliefs compatibility
+            else data.event_resolution
+            if hasattr(data, "event_resolution")
+            # use data frequency
+            else pd.infer_freq(data.index)
+            if pd.infer_freq(data.index) is not None
+            # best guess from time window
+            else time_window / len(data)
+            if time_window is not None
+            # best guess from data index
+            else (data.index[-1] - data.index[0]) / len(data)
+            if len(data) != 0
+            # assume instantaneous values, which can't be upsampled
+            else timedelta()
+        )
+        resample_ratio = pd.to_timedelta(to_offset(event_resolution)) // pd.Timedelta(
+            expected_frequency
+        )
+        if resample_ratio == 1:
+            # fill in missing frequency and abort resampling
+            data.index.freq = expected_frequency
+            return data
+
+        # Convert to PeriodIndex for desired behavior under resampling (specifically, binning the right-most period)
+        # remember timezone before resampling, see https://github.com/pandas-dev/pandas/issues/28039
+        tz = data.index.tzinfo
+        data.index = data.index.to_period(event_resolution)
+
+        data_resampler = data.resample(
+            timedelta_to_pandas_freq_str(expected_frequency),
+            **{
+                k: v
+                for k, v in self.resampling_config.items()
+                if k not in ("downsampling_method", "upsampling_method")
+            },
+        )
+
+        # Choose between upsampling or downsampling
+        if resample_ratio < 1:
+            up_or_down_sampling = "down"
         else:
-            data_resampler = data.resample(
-                timedelta_to_pandas_freq_str(expected_frequency),
-                **{
-                    k: v
-                    for k, v in self.resampling_config.items()
-                    if k != "aggregation"
-                }
-            )
-            if "aggregation" not in self.resampling_config:
-                data = data_resampler.mean()
-            else:
-                for agg_name, agg_method in inspect.getmembers(
-                    data_resampler, inspect.ismethod
-                ):
-                    if self.resampling_config["aggregation"] == agg_name:
-                        data = agg_method()
-                        break
+            up_or_down_sampling = "up"
+
+        # Apply resampling method
+        for resampling_method_name, resampling_method in inspect.getmembers(
+            data_resampler, inspect.ismethod
+        ):
+            if (
+                self.resampling_config[f"{up_or_down_sampling}sampling_method"]
+                == resampling_method_name
+            ):
+                if up_or_down_sampling == "up":
+                    # Fill NaN values introduced by upsampling, but no more than that
+                    data = resampling_method(limit=resample_ratio - 1)
                 else:
-                    raise IncompatibleModelSpecs(
-                        "Cannot find resampling aggregation %s on %s"
-                        % (self.resampling_config["aggregation"], data_resampler)
-                    )
+                    data = resampling_method()
+                break
+        else:
+            raise IncompatibleModelSpecs(
+                f"Cannot find {up_or_down_sampling}sampling method %s on %s"
+                % (
+                    self.resampling_config[f"{up_or_down_sampling}sampling_method"],
+                    data_resampler,
+                )
+            )
+
+        # Convert to DatetimeIndex and place back timezone
+        data.index = data.index.to_timestamp().tz_localize(tz)
+        data.index.freq = expected_frequency
+
         return data
 
     def interpolate_data(self, data) -> pd.Series:
@@ -434,7 +563,7 @@ class DBSeriesSpecs(SeriesSpecs):
         return df["value"]
 
     def check_data(self, df: pd.DataFrame):
-        """ Raise error if data is empty or contains nan values.
+        """Raise error if data is empty or contains nan values.
         Here, other than in load_series, we can show the query, which is quite helpful."""
         if df.empty:
             raise MissingData(
@@ -457,8 +586,7 @@ class DBSeriesSpecs(SeriesSpecs):
 
 
 class ModelSpecs(object):
-    """Describes a model and how it was trained.
-    """
+    """Describes a model and how it was trained."""
 
     outcome_var: SeriesSpecs
     model_type: Type  # e.g. statsmodels.api.OLS, sklearn.linear_model.LinearRegression, ...
@@ -569,3 +697,21 @@ def parse_series_specs(
         return ObjectSeriesSpecs(specs, name)
     else:
         return specs
+
+
+def ensure_resampling_config_is_set(
+    resampling_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Set default downsampling_method and upsampling_method if these are missing.
+
+    The default downsampling method is "mean".
+    The default upsampling method is "pad".
+    """
+
+    if resampling_config is None:
+        resampling_config = {}
+    if resampling_config.get("downsampling_method", None) is None:
+        resampling_config["downsampling_method"] = "mean"
+    if resampling_config.get("upsampling_method", None) is None:
+        resampling_config["upsampling_method"] = "pad"
+    return resampling_config

@@ -82,7 +82,7 @@ def test_rolling_forecast():
 
 
 def test_rolling_forecast_with_refitting(caplog):
-    """ Also rolling forecasting, but with re-fitting the model in between.
+    """Also rolling forecasting, but with re-fitting the model in between.
     We'll test if the expected number of re-fittings happened.
     Also, the model we end up with should not be the one we started with."""
     caplog.set_level(logging.DEBUG, logger="timetomodel.forecasting")
@@ -93,7 +93,9 @@ def test_rolling_forecast_with_refitting(caplog):
     end = DATA_START + timedelta(hours=190)
     forecasts, final_model_state = forecasting.make_rolling_forecasts(start, end, specs)
     expected_values = specs.outcome_var.load_series(
-        expected_frequency=timedelta(hours=1)
+        time_window=(start, end),
+        expected_frequency=timedelta(hours=1),
+        check_time_window=True,
     ).loc[start:end][:-1]
     for forecast, expected_value in zip(forecasts, expected_values):
         assert abs(forecast - expected_value) < TOLERANCE
