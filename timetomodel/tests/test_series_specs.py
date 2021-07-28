@@ -142,8 +142,37 @@ def test_load_series_with_custom_frequency_resampling(down_or_up: str):
     assert sum(series) == 6  # the sum remains the same
 
 
-@pytest.mark.parametrize("down_or_up", ["down", "up"])
-def test_load_series_with_instantaneous_measurements(down_or_up: str):
+@pytest.mark.parametrize(
+    "down_or_up, exp_series",
+    [
+        (
+            "down",
+            pd.Series(
+                [1, 3],
+                index=pd.date_range(
+                    datetime(2019, 1, 29, 15),
+                    datetime(2019, 1, 29, 16),
+                    freq="1H",
+                    tz="UTC",
+                ),
+            ),
+        ),
+        (
+            "up",
+            pd.Series(
+                [1, 1, 1, 2, 2, 2, 3],
+                index=pd.date_range(
+                    datetime(2019, 1, 29, 15, 30),
+                    datetime(2019, 1, 29, 16),
+                    freq="5T",
+                    tz="UTC",
+                ),
+                dtype="float64",
+            ),
+        ),
+    ],
+)
+def test_load_series_with_instantaneous_measurements(down_or_up: str, exp_series):
     """ Test resampling of instantaneous measurements. """
     dt = datetime(2019, 1, 29, 15, 30)
     s = ObjectSeriesSpecs(
@@ -165,7 +194,7 @@ def test_load_series_with_instantaneous_measurements(down_or_up: str):
         else timedelta(minutes=5)
     )
     assert len(series) == 2 if down_or_up == "down" else len(series) == 7
-    assert series[-1] == 3  # the last (on-the-hour) measurement remains the same
+    pd.testing.assert_series_equal(series, exp_series)
 
 
 def test_load_series_without_data():
