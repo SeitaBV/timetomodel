@@ -305,7 +305,8 @@ class SeriesSpecs(object):
         # Convert to PeriodIndex for desired behavior under resampling
         # (specifically, binning the right-most period such that the time series is resampled all
         # the way to the end of the last period instead of just until the start of the last period)
-        # remember timezone before resampling, see https://github.com/pandas-dev/pandas/issues/28039
+        # - remember timezone before resampling, see https://github.com/pandas-dev/pandas/issues/28039
+        # - do not convert if resolution is 0, because PeriodIndex with 0 frequency is not allowed
         tz = data.index.tzinfo
         if event_resolution != timedelta(hours=0):
             data.index = data.index.to_period(event_resolution)
