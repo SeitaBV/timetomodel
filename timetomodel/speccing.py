@@ -302,10 +302,14 @@ class SeriesSpecs(object):
             data.index.freq = expected_frequency
             return data
 
-        # Convert to PeriodIndex for desired behavior under resampling (specifically, binning the right-most period)
-        # remember timezone before resampling, see https://github.com/pandas-dev/pandas/issues/28039
+        # Convert to PeriodIndex for desired behavior under resampling
+        # (specifically, binning the right-most period such that the time series is resampled all
+        # the way to the end of the last period instead of just until the start of the last period)
+        # - remember timezone before resampling, see https://github.com/pandas-dev/pandas/issues/28039
+        # - do not convert if resolution is 0, because PeriodIndex with 0 frequency is not allowed
         tz = data.index.tzinfo
-        data.index = data.index.to_period(event_resolution)
+        if event_resolution != timedelta(hours=0):
+            data.index = data.index.to_period(event_resolution)
 
         data_resampler = data.resample(
             timedelta_to_pandas_freq_str(expected_frequency),
@@ -346,7 +350,8 @@ class SeriesSpecs(object):
             )
 
         # Convert to DatetimeIndex and place back timezone
-        data.index = data.index.to_timestamp().tz_localize(tz)
+        if event_resolution != timedelta(hours=0):
+            data.index = data.index.to_timestamp().tz_localize(tz)
         data.index.freq = expected_frequency
 
         return data
