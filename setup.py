@@ -11,7 +11,7 @@ setup(
     install_requires=[
         "pandas",
         "statsmodels",
-        "sklearn",
+        "scikit-learn",
         "matplotlib",
         "numpy",
         "scipy",
