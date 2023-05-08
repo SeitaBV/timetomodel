@@ -121,7 +121,7 @@ def get_time_steps(
 
     # easy cases: one or two datetime objects
     if isinstance(time_range, datetime):
-        return pd.date_range(time_range, time_range, closed="left", freq=pd_frequency)
+        return pd.date_range(time_range, time_range, inclusive="left", freq=pd_frequency)
     elif isinstance(time_range, tuple):
         if not timedelta_fits_into(specs.frequency, time_range[1] - time_range[0]):
             raise Exception(
@@ -129,7 +129,7 @@ def get_time_steps(
                 % (time_range[0], time_range[1], specs.frequency)
             )
         return pd.date_range(
-            time_range[0], time_range[1], closed="left", freq=pd_frequency
+            time_range[0], time_range[1], inclusive="left", freq=pd_frequency
         )
 
     # special cases: "train" or "test" - we have to calculate from model specs
