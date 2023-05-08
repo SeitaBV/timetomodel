@@ -9,7 +9,7 @@ setup(
     keywords=["time series", "forecasting"],
     version="0.7.1",
     install_requires=[
-        "pandas",
+        "pandas >= 1.4.0",
         "statsmodels",
         "scikit-learn",
         "matplotlib",
