@@ -90,7 +90,7 @@ def make_rolling_forecasts(
     pd_frequency = timedelta_to_pandas_freq_str(model_specs.frequency)
     values = pd.Series(
         index=pd.date_range(
-            start, end, freq=pd_frequency, closed="left", tz=start.tzinfo
+            start, end, freq=pd_frequency, inclusive="left", tz=start.tzinfo
         )
     )
     time_step = start

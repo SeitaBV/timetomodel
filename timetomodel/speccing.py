@@ -133,7 +133,7 @@ class SeriesSpecs(object):
         ```
         resampling_config=dict(
             event_resolution=timedelta(hours=1),
-            closed="left",
+            inclusive="left",
             downsampling_method="sum",
             upsampling_method="reverse_sum",
         )
@@ -145,7 +145,7 @@ class SeriesSpecs(object):
           Being explicit about the event resolution is especially important when the data frequency
           is not the same as the event resolution, for example, in the case of
           upsampling a time series containing hourly averages with only one data point per day.
-        - closed="left" will become an argument to `pandas.Series.resample`.
+        - inclusive="left" will become an argument to `pandas.Series.resample`.
           It denotes that each period in the time series is indexed by its start time.
         - When downsampling, `pandas.Series.resample().sum()` will be called.
         - When upsampling, `pandas.Series.resample().reverse_sum()` will be called.
